@@ -1,7 +1,7 @@
 <h2>Project Title: Nazi Tool<h2/>
 
-Description:
-A Collection of most wanted tools that can help you manage your daily needs, Windows 10 & 11
+<h2>Description:
+A Collection of most wanted tools that can help you manage your daily needs, Windows 10 & 11<h2/>
 
 Installation:
 Step 1: download or clone the project from the repository.
