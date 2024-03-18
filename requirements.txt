@@ -4,7 +4,6 @@ telebot
 colorama
 pywin32
 pysqlite3
-zipfile
 pyzipper
 ipinfo
 folium
