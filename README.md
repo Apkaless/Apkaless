@@ -1,4 +1,4 @@
-Project Title: Nazi Tool
+<h2>Project Title: </>Nazi Tool
 
 Description:
 A Collection of most wanted tools that can help you manage your daily needs, Windows 10 & 11
