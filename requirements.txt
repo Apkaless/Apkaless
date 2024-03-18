@@ -1,0 +1,17 @@
+requests
+phonenumbers
+telebot
+colorama
+pywin32
+pysqlite3
+zipfile
+pyzipper
+ipinfo
+folium
+opencage
+py7zr
+webbrowser
+psutil
+pywifi
+cloudscraper
+pycrypto
