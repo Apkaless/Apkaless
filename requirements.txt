@@ -3,14 +3,12 @@ phonenumbers
 telebot
 colorama
 pywin32
-pysqlite3
 pyzipper
 ipinfo
 folium
 opencage
 py7zr
-webbrowser
 psutil
 pywifi
 cloudscraper
-pycrypto
+pycryptodome
