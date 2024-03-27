@@ -14,7 +14,6 @@ import webbrowser
 from datetime import datetime
 from threading import Thread
 from zipfile import ZipFile, is_zipfile
-
 import cloudscraper
 import folium
 import ipinfo
