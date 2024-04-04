@@ -14,6 +14,7 @@ import webbrowser
 from datetime import datetime
 from threading import Thread
 from zipfile import ZipFile, is_zipfile
+from tkinter import messagebox
 import cloudscraper
 import folium
 import ipinfo
@@ -1284,7 +1285,8 @@ def network_optimization():
                 if 'The operation completed successfully.' in res:
                     print(f'''{green}        Nagle's Algorithm Set To ==> {white}False''')
                     return True
-        print(f'\n{red}[{white}{str(datetime.time(datetime.now())).split(".")[0]}{red}]{red}[console]: {white}The {green}Progress {white}Has Been Done !\n')
+        print(
+            f'\n{red}[{white}{str(datetime.time(datetime.now())).split(".")[0]}{red}]{red}[console]: {white}The {green}Progress {white}Has Been Done !\n')
 
     transport_name = re.search('{.+}', get_transport_name(find_mac_address_of_current_adapter()[0])).group()
 
@@ -1314,7 +1316,8 @@ def network_optimization():
         print(e)
         time.sleep(3)
 
-    input(f'{red}[{white}{str(datetime.time(datetime.now())).split(".")[0]}{red}]{red}[console]: {white}Hit {red}[Enter] {white}To Exit ')
+    input(
+        f'{red}[{white}{str(datetime.time(datetime.now())).split(".")[0]}{red}]{red}[console]: {white}Hit {red}[Enter] {white}To Exit ')
 
 
 def discordHunter(email, password):
@@ -1468,8 +1471,8 @@ def discordHunter(email, password):
                             # print(f'{counter}) Captured User ===> {username}\n======================')
                             with open('captured.txt', 'a') as f:
                                 f.writelines([
-                                                 f'====================\nCaptured By Apkaless\n====================\nUser: {username}\n====================\nFollow Me On Instagram ===> Apkaless\n====================\n',
-                                                 '\n'])
+                                    f'====================\nCaptured By Apkaless\n====================\nUser: {username}\n====================\nFollow Me On Instagram ===> Apkaless\n====================\n',
+                                    '\n'])
                                 f.close()
                                 capturedUsers.append(username)
                                 checkedUsers.append(username)
@@ -1499,23 +1502,23 @@ def moreOptions():
 
             print(f'''
                              
-{green}[09] {lcyan}Discord Usernames Checker                                                 {green}[21] {lcyan}Zip File {lcyan}Password Cracker
-{green}[10] {lcyan}Discord Webhook Spammer                                                   {green}[22] {lcyan}IP & Domain LOOKUP
-{green}[11] {lcyan}Malware {green}(Steal Google Chrome And Opera GX Passwords)                      {green}[23] {lcyan}Phone Number Tracker
-{green}[12] {lcyan}Extract All {green}WI-FI Passwords{lcyan} That You Have Connected Recently              {green}[99] {lcyan}Main Menu      
-{green}[13] {lcyan}Most Nmap Commands Used By {green}(Black Hat Team)
-{green}[14] {lcyan}Wordlist Generator {green}(Brute Force And Dictionary Attack){rescolor}
-{green}[15] {lcyan}Convert {green}Python {lcyan}File To {green}EXE {lcyan}File     
-{green}[16] {lcyan}Hash {lcyan}Cracker
-{green}[17] {lcyan}7z File Password Cracker
-{green}[18] {lcyan}Get HWID
-{green}[19] {lcyan}Spoof HWID
-{green}[20] {lcyan}Wifi Cracker
+{green}[10] {lcyan}Discord Usernames Checker                                                 {green}[22] {lcyan}Zip File {lcyan}Password Cracker
+{green}[11] {lcyan}Discord Webhook Spammer                                                   {green}[23] {lcyan}IP & Domain LOOKUP
+{green}[12] {lcyan}Malware {green}(Steal Google Chrome And Opera GX Passwords)                      {green}[24] {lcyan}Phone Number Tracker
+{green}[13] {lcyan}Extract All {green}WI-FI Passwords{lcyan} That You Have Connected Recently              {green}[99] {lcyan}Main Menu      
+{green}[14] {lcyan}Most Nmap Commands Used By {green}(Black Hat Team)
+{green}[15] {lcyan}Wordlist Generator {green}(Brute Force And Dictionary Attack){rescolor}
+{green}[16] {lcyan}Convert {green}Python {lcyan}File To {green}EXE {lcyan}File     
+{green}[17] {lcyan}Hash {lcyan}Cracker
+{green}[18] {lcyan}7z File Password Cracker
+{green}[19] {lcyan}Get HWID
+{green}[20] {lcyan}Spoof HWID
+{green}[21] {lcyan}Wifi Cracker
 
              ''')
             cmd = input(f'{lcyan}!{green}]==={lcyan}{terminal * 13}{green}==>{white} ')
 
-            if cmd == '9':
+            if cmd == '10':
                 os.system('cls')
                 while True:
                     print(f'''{yellow}\n[!] In Order To Use This Tool You Need To Do This:{white}
@@ -1555,11 +1558,11 @@ def moreOptions():
                 th.join()
 
                 moreOptions()
-            if cmd == '10':
+            if cmd == '11':
                 webhookSpammer()
                 input(f'\n\n{blue}[!] {green}Hit ENTER TO GO BACK {rescolor}')
 
-            if cmd == '11':
+            if cmd == '12':
                 os.system('cls')
                 try:
 
@@ -1574,21 +1577,21 @@ def moreOptions():
                 except KeyboardInterrupt:
                     pass
 
-            if cmd == '12':
+            if cmd == '13':
                 wifiPassword()
                 input(f'\n\n{blue}[!] {green}Hit ENTER TO GO BACK {rescolor}')
-            if cmd == '13':
+            if cmd == '14':
                 nmapCommands()
                 input(f'\n\n{blue}[!] {green}Hit ENTER TO GO BACK {rescolor}')
 
-            if cmd == '14':
+            if cmd == '15':
                 try:
                     wordlist()
                     input(f'\n\n{blue}[!] {green}Hit ENTER TO GO BACK {rescolor}')
                 except KeyboardInterrupt:
                     moreOptions()
 
-            if cmd == '15':
+            if cmd == '16':
 
                 os.system('cls')
 
@@ -1603,7 +1606,7 @@ def moreOptions():
                 except KeyboardInterrupt:
                     moreOptions()
 
-            if cmd == '16':
+            if cmd == '17':
                 os.system('cls')
                 try:
                     print(f'''{yellow}[!] {white}Supported Hash Types:
@@ -1630,7 +1633,7 @@ def moreOptions():
                 except KeyboardInterrupt:
                     moreOptions()
 
-            if cmd == '17':
+            if cmd == '18':
                 os.system('cls')
                 try:
 
@@ -1641,7 +1644,7 @@ def moreOptions():
                 except KeyboardInterrupt:
                     moreOptions()
 
-            if cmd == '18':
+            if cmd == '19':
                 os.system('cls')
                 try:
 
@@ -1651,7 +1654,7 @@ def moreOptions():
                 except KeyboardInterrupt:
                     moreOptions()
 
-            if cmd == '19':
+            if cmd == '20':
                 os.system('cls')
                 try:
                     mssg = hwid_spoofer()
@@ -1666,7 +1669,7 @@ def moreOptions():
                 except KeyboardInterrupt:
                     moreOptions()
 
-            if cmd == '20':
+            if cmd == '21':
                 os.system('cls')
                 try:
 
@@ -1679,7 +1682,7 @@ def moreOptions():
                 except KeyboardInterrupt:
                     moreOptions()
 
-            if cmd == '21':
+            if cmd == '22':
                 os.system('cls')
                 try:
 
@@ -1696,17 +1699,18 @@ def moreOptions():
                 except KeyboardInterrupt:
                     moreOptions()
 
-            if cmd == '22':
+            if cmd == '23':
                 os.system('cls')
                 try:
 
-                    ip = input(f'\n{green}[+] IP Address:{white} ')
-                    ip_lookup(ip)
+                    ip = input(fr'\n{green}[+] IP Address \ Domain Name:{white} ')
+                    if ip:
+                        ip_lookup(ip)
                     input(f'\n{blue}[!] {green}Hit ENTER TO GO BACK {rescolor}')
                 except KeyboardInterrupt:
                     moreOptions()
 
-            if cmd == '23':
+            if cmd == '24':
                 os.system('cls')
                 try:
 
@@ -1755,12 +1759,12 @@ def main():
                               {green}|    {green}[+] Nationality : {lcyan}Iraq                        {green}|                
         ================================================================================================
                                 
-        {green}[01] {lcyan}IDM Trial Reset                                 {green}[07] {lcyan}PUBLIC IP
-        {green}[02] {lcyan}Activate Windows {green}(10 & 11)                      {green}[08] {lcyan}SYSTEM INFORMATION
-        {green}[03] {lcyan}Optimize Network Adapter                        {green}[99] {lcyan}More
-        {green}[04] {lcyan}Proxy Generator
-        {green}[05] {lcyan}Proxy Checker
-        {green}[06] {lcyan}Clean Your System With One Hit                    
+        {green}[01] {lcyan}IDM Trial Reset                                 {green}[07] {lcyan}YinOmega
+        {green}[02] {lcyan}Clean Your System With One Hit                  {green}[08] {lcyan}PUBLIC IP
+        {green}[03] {lcyan}Activate Windows {green}(10 & 11)                      {green}[09] {lcyan}SYSTEM INFORMATION
+        {green}[04] {lcyan}Optimize Network Adapter                        {green}[99] {lcyan}More
+        {green}[05] {lcyan}Proxy Generator
+        {green}[06] {lcyan}Proxy Checker                  
 
          ''')
 
@@ -1776,23 +1780,28 @@ def main():
 
             if cmd == '2':
                 try:
-
-                    subprocess.check_output('start tools/WindowsActivation.exe', shell=True)
+                    subprocess.check_output('start tools/cleaner.exe', shell=True)
                 except:
                     continue
 
             if cmd == '3':
-                os.system('cls')
-                network_optimization()
-                input(f'\n{blue}[!] {green}Hit ENTER TO GO BACK {rescolor}')
+
+                subprocess.check_output('start tools/WindowsActivation.exe', shell=True)
 
             if cmd == '4':
+                try:
+                    os.system('cls')
+                    network_optimization()
+                except:
+                    continue
+            if cmd == '5':
                 try:
                     proxy_gen()
                     input(f'\n{blue}[!] {green}Hit ENTER TO GO BACK {rescolor}')
                 except:
                     continue
-            if cmd == '5':
+
+            if cmd == '6':
                 try:
                     os.system('cls')
                     prxlistinput = os.path.join(input(f'\n{green}[+] Path To Proxies List To Check:{white} '))
@@ -1801,21 +1810,16 @@ def main():
                 except:
                     continue
 
-            if cmd == '6':
-                try:
-
-                    subprocess.check_output('start tools/cleaner.exe', shell=True)
-                except:
-                    continue
-
             if cmd == '7':
-                ip = public_ip()
-
-                print(f'\n{green}[+] Public IP:{white} {ip}')
-
-                input(f'\n{blue}[!] {green}Hit ENTER TO GO BACK {rescolor}')
+                threading.Thread(target=messagebox.showinfo, args=('Password', 'The Password is: 0xy1n')).start()
+                threading.Thread(target=lambda: subprocess.check_output('start tools/yinOmega.exe', shell=True)).start()
 
             if cmd == '8':
+                ip = public_ip()
+                print(f'\n{green}[+] Public IP:{white} {ip}')
+                input(f'\n{blue}[!] {green}Hit ENTER TO GO BACK {rescolor}')
+
+            if cmd == '9':
                 sysinfo()
                 input(f'\n\n{blue}[!] {green}Hit ENTER TO GO BACK {rescolor}')
 
