@@ -12,3 +12,6 @@ psutil
 pywifi
 cloudscraper
 pycryptodome
+cryptography
+pillow
+tk
