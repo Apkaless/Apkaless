@@ -15,3 +15,6 @@ pycryptodome
 cryptography
 pillow
 tk
+discord.py
+yt-dlp
+whois
