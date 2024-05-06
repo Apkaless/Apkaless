@@ -18,3 +18,5 @@ tk
 discord.py
 yt-dlp
 python-whois
+beautifulsoup4
+comtypes
