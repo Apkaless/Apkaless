@@ -17,4 +17,4 @@ pillow
 tk
 discord.py
 yt-dlp
-whois
+python-whois
