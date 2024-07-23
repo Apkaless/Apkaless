@@ -37,6 +37,17 @@ from pytools.proxy_scraper import SCRAPER
 from pytools.pythonic_way_proxy_checker import HttpProxyChecker, Socks4ProxyChecker, Socks5ProxyChecker
 from urllib.parse import urlparse
 
+
+
+def check_update():
+    with cloudscraper.create_scraper() as s:
+        response = s.get('https://raw.githubusercontent.com/Apkaless/Apkaless/main/ver')
+        res = int(response.text.strip())
+        if res != cversion:
+            msg = messagebox.askyesno('Update Available', 'Would You Like To Visit Update Page?')
+            if msg == True:
+                webbrowser.open('https://github.com/Apkaless/Apkaless/tree/main')
+
 class usernameFinder(tk.Tk):
     websites = {
         "Facebook": "https://www.facebook.com/",
@@ -1707,27 +1718,23 @@ def main():
 
             os.system('cls')                                                         
             print(fr'''{cyan}                                                                                                          
-                                    ┏────────────────────────────────────────────────────────────────────────────────────────┓
-                                    ┃                                                                                        ┃
-                                   ┌┘                              Name         ➱  Apkaless                                  └┐
-                                   ┃                               Github       ➱  Https://github.com/apkaless                ┃
-                                   ┃                               Instagram    ➱  Https://instagram.com/apkaless             ┃
-                                   ┕┑                              Region       ➱  IRAQ                                      ┌┘
-                                    ┃                                                                                        ┃
-                                    ┖───────────────────────────────┓                     ┏──────────────────────────────────┚
-                                                                    │                     │
-                                                                    │                     │
-                                                                    {lcyan}│                     │
-                                                                    │                     │
-            ┏───────────────────────────────────────────────────────┚                     ┖────────────────────────────────────────────────────────────────┓               
-            ┃ [01] IDM Trial Reset                          [09] Discord Users Checker                                          [17] 7z Files Cracker      ┃
-            ┃ [02] Clean Temp Files                         [10] Discord Webhook Spammer                                        [18] Zip Files Cracker     ┃
-            ┃ [03] Activate Your Windows                    [11] Malware (Chrome & Opera Saved Passwords Stealer)               [19] WiFi Cracker          ┃
-            ┃ [04] Optimize Your Network                    [12] Get Saved Wifi Passwords                                       [20] Spoof HWID            ┃
-            ┃ [05] Get Proxies                              [13] Advanced Nmap Commands                                         [21] Spoof Disk HWID       ┃
-            ┃ [06] Proxies Checker                          [14] Fastest Wordlist Generator                                     [22] Get HWID              ┃
-            ┃ [07] Search For Username                      [15] Python File Converter (py to exe)                              [23] URL Masking           ┃
-            ┃ [08] YinOmega                                 [16] Hash Cracker                                                   [24] IP & Domain Lookup    ┃
+                                          ┏────────────────────────────────────────────────────────────────────────────────────┓
+                                          ┃                                                                                    ┃
+                                         ┌┘                            {lcyan}Ω Name         ➱  Apkaless{cyan}                              └┐
+                                         ┃                             {lcyan}Ω Github       ➱  Https://github.com/apkaless{cyan}            ┃
+                                         ┃                             {lcyan}Ω Instagram    ➱  Https://instagram.com/apkaless{cyan}         ┃
+                                         ┕┑                            {lcyan}Ω Region       ➱  IRAQ                                  ┌┘
+                                          ┃                            {lcyan}Ω Version      ➱  {str(cversion)}                                     ┃
+                                          ┖──────────────────────────────────            ──────────────────────────────────────┚
+            ┏────────────────────────────────────────────────────────────────            ──────────────────────────────────────────────────────────────────┓               
+            ┃ {lcyan}01 IDM Trial Reset                          09 Discord Users Checker                                          17 7z Files Cracker{cyan}            ┃
+            ┃ {lcyan}02 Clean Temp Files                         10 Discord Webhook Spammer                                        18 Zip Files Cracker{cyan}           ┃
+            ┃ {lcyan}03 Activate Your Windows                    11 Malware (Chrome & Opera Saved Passwords Stealer)               19 WiFi Cracker{cyan}                ┃
+            ┃ {lcyan}04 Optimize Your Network                    12 Get Saved Wifi Passwords                                       20 Spoof HWID{cyan}                  ┃
+            ┃ {lcyan}05 Get Proxies                              13 Advanced Nmap Commands                                         21 Spoof Disk HWID{cyan}             ┃
+            ┃ {lcyan}06 Proxies Checker                          14 Fastest Wordlist Generator                                     22 Get HWID{cyan}                    ┃
+            ┃ {lcyan}07 Search For Username                      15 Python File Converter (py to exe)                              23 URL Masking{cyan}                 ┃
+            ┃ {lcyan}08 YinOmega                                 16 Hash Cracker                                                   24 IP & Domain Lookup{cyan}          ┃
             ┖──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┚
 
          ''')
@@ -1997,6 +2004,7 @@ if __name__ == '__main__':
     lcyan = Fore.LIGHTCYAN_EX
     lmagenta = Fore.LIGHTMAGENTA_EX
     rescolor = Fore.RESET
+    cversion = 2
     tool_parent_dir = os.getcwd()
     # tool_parent_dir = os.path.join(tool_parent_dir_1, 'Apkaless')
     username = os.getlogin()
@@ -2021,4 +2029,5 @@ if __name__ == '__main__':
         zf.extractall(path_to_assistfolder)
 
     hwid = get_hwid()
+    check_update()
     main()
