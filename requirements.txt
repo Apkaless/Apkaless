@@ -20,3 +20,5 @@ yt-dlp
 python-whois
 beautifulsoup4
 comtypes
+random_user_agent
+bs4

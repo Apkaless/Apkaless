@@ -28,7 +28,6 @@ import py7zr
 import pywifi
 import pyzipper
 import requests
-import pyshorteners
 from colorama import Fore
 from opencage.geocoder import OpenCageGeocode
 from phonenumbers import geocoder, timezone, carrier
@@ -36,8 +35,8 @@ from pywifi import const
 from pytools.proxy_scraper import SCRAPER
 from pytools.pythonic_way_proxy_checker import HttpProxyChecker, Socks4ProxyChecker, Socks5ProxyChecker
 from urllib.parse import urlparse
-
-
+from colorama import Fore, init
+from bs4 import BeautifulSoup
 
 def check_update():
     with cloudscraper.create_scraper() as s:
@@ -1588,12 +1587,90 @@ def discordHunter(email, password):
         time.sleep(3)
 
 def url_masking():
-
+    init(convert=True)
     version = '1'
-    github_url =  'https://github.com/apkaless'
+    github_url = 'https://github.com/apkaless'
     instagram = 'https://instagram.com/apkaless'
     region = 'IRAQ'
-    pyshort = pyshorteners.Shortener()
+    red = Fore.RED
+    green = Fore.GREEN
+    yellow = Fore.YELLOW
+    white = Fore.WHITE
+    cyan = Fore.CYAN
+    lw = Fore.LIGHTWHITE_EX
+    black = Fore.BLACK
+    lr = Fore.LIGHTRED_EX
+    lb = Fore.LIGHTBLUE_EX
+    lc = Fore.LIGHTCYAN_EX
+    lib = Fore.LIGHTBLACK_EX
+    res = Fore.RESET
+
+
+    def validate_url(url):
+        url_format = re.compile(r'https?://(www.)?[a-zA-Z0-9-]+\.+[a-zA-Z0-9]+')
+
+        if not re.match(url_format, url):
+            raise ValueError('\nInvalid URL format. Please provide a valid web URL.\n')
+
+
+    def validate_custom_domain(custom_domain):
+        domain_format = re.compile(r'[a-zA-Z0-9-]+\.+[a-zA-Z0-9]+')
+
+        if not re.match(domain_format, custom_domain):
+            raise ValueError('\nInvalid custom domain. Please provide a valid domain name.\n')
+
+
+    def validate_keyword(keyword):
+        length = 15
+
+        if not isinstance(keyword, str):
+
+            raise TypeError('\nInput must be a string.\n')
+
+        elif ' ' in keyword:
+            raise TypeError('\nKeyword Must Not Contain Spaces, Replace Spaces With "-".\n')
+
+        elif len(keyword) > length:
+            raise ValueError('\nInput string exceeds the maximum allowed length.\n')
+
+        return True
+
+
+    def extract_url(html_content: str):
+
+        soup = BeautifulSoup(html_content, 'lxml')
+
+        div = soup.find('div', attrs={'id': 'app'})
+        
+        return div.a.text
+
+    def short_url(web_url):
+
+        data = {
+            'url':f'{web_url}',
+            'shorturl':''
+        }
+
+        headers = {
+
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36'
+
+        }
+
+        res = requests.post('https://da.gd/', data=data, headers=headers)
+        shorted_url = extract_url(res.text)
+
+        return shorted_url
+
+    def mask_url(custom_domain, keyword, url):
+        parsd_url = urlparse(short_url(url))
+
+        masked_url = f'{parsd_url.scheme}://{custom_domain}-{keyword}@{parsd_url.netloc}{parsd_url.path}'
+
+        return masked_url
+
 
     def print_banner():
         os.system('cls')
@@ -1609,62 +1686,16 @@ def url_masking():
     ╚═╝  ╚═╝╚═╝     ╚═╝  ╚═╝╚═╝  ╚═╝╚══════╝╚══════╝╚══════╝╚══════╝
                                                                     
 
-    {green}Version     : {lcyan}{version}
-    {green}Github      : {lcyan}{github_url}
-    {green}Instagram   : {lcyan}{instagram}
-    {green}Region      : {lcyan}{region}        
+    {green}Version     : {lc}{version}
+    {green}Github      : {lc}{github_url}
+    {green}Instagram   : {lc}{instagram}
+    {green}Region      : {lc}{region}        
 
     ''')
 
-    def validate_url(url):
-
-        url_format = re.compile(r'https?://(www.)?[a-zA-Z0-9-]+\.+[a-zA-Z0-9]+')
-        
-        if not re.match(url_format, url):
-            raise ValueError('\nInvalid URL format. Please provide a valid web URL.\n')
 
 
-    def validate_custom_domain(custom_domain):
-
-        domain_format = re.compile(r'[a-zA-Z0-9-]+\.+[a-zA-Z0-9]+')
-        
-        if not re.match(domain_format, custom_domain):
-            raise ValueError('\nInvalid custom domain. Please provide a valid domain name.\n')
-
-
-    def validate_keyword(keyword):
-        length = 15
-
-        if not isinstance(keyword, str):
-
-            raise TypeError('\nInput must be a string.\n')
-        
-        elif ' ' in keyword:
-            raise TypeError('\nKeyword Must Not Contain Spaces, Replace Spaces With "-".\n')
-        
-        elif len(keyword) > length:
-            raise ValueError('\nInput string exceeds the maximum allowed length.\n')
-        
-        return True
-
-    def short_url(web_url):
-        return pyshort.dagd.short(web_url)
-
-
-
-    def mask_url(custom_domain, keyword, url):
-        
-        parsd_url = urlparse(short_url(url))
-
-        masked_url = f'{parsd_url.scheme}://{custom_domain}-{keyword}@{parsd_url.netloc}{parsd_url.path}'
-
-        return masked_url
-        
-
-
-    def main():
-
-        while True:
+    while True:
             print_banner()
             try:
                 url = input(f'{cyan}\n↳ URL To Mask {cyan}→{white}  ')
@@ -1674,35 +1705,32 @@ def url_masking():
                 print(red + str(e))
                 sleep(2)
                 continue
-        while True:
-            try:
-                custom_domain = input(f'{cyan}\n↳ Custom Domain {green}(ex: google.com) {cyan}→{white}  ')
-                validate_custom_domain(custom_domain)
-                break
-            except Exception as e:
-                print(red + str(e))
-                sleep(2)
-                continue
+    while True:
+        try:
+            custom_domain = input(f'{cyan}\n↳ Custom Domain {green}(ex: google.com) {cyan}→{white}  ')
+            validate_custom_domain(custom_domain)
+            break
+        except Exception as e:
+            print(red + str(e))
+            sleep(2)
+            continue
 
-        while True:
+    while True:
 
-            try:
+        try:
 
-                keyword = input(f'{cyan}\n↳ Phish Keyword {green}(ex: login, free, anything) {cyan}→{white} ')
-                validate_keyword(keyword)
-                break
-            except Exception as e:
-                print(red + str(e))
-                sleep(2)
-                continue
+            keyword = input(f'{cyan}\n↳ Phish Keyword {green}(ex: login, free, anything) {cyan}→{white} ')
+            validate_keyword(keyword)
+            break
+        except Exception as e:
+            print(red + str(e))
+            sleep(2)
+            continue
 
-        masked_url = mask_url(custom_domain, keyword, url)
-        print(f'\n{green}[~] Original URL →{cyan} {url}')
-        print(f'\n{green}[~] Masked URL →{cyan} {masked_url}')
-        
-    if __name__ == '__main__':
-        main()
-
+    masked_url = mask_url(custom_domain, keyword, url)
+    print(f'\n{green}[~] Original URL →{cyan} {url}')
+    print(f'\n{green}[~] Masked URL →{cyan} {masked_url}')
+    input('\n\n')
 
 def remove_tools():
     os.chdir(path_to_assistfolder)
@@ -2006,7 +2034,7 @@ if __name__ == '__main__':
     rescolor = Fore.RESET
     cversion = 2
     tool_parent_dir = os.getcwd()
-    # tool_parent_dir = os.path.join(tool_parent_dir_1, 'Apkaless')
+    # tool_parent_dir = os.path.join(tool_parent_dir, 'Apkaless')
     username = os.getlogin()
     testfold = f'C:/Users/{username}/AppData/Roaming/'
     path_to_roaming_windows = f'C:/Users/{username}/AppData/Roaming/Microsoft/Windows'
