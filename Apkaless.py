@@ -28,6 +28,7 @@ import py7zr
 import pywifi
 import pyzipper
 import requests
+import sys
 from colorama import Fore
 from opencage.geocoder import OpenCageGeocode
 from phonenumbers import geocoder, timezone, carrier
@@ -1482,6 +1483,7 @@ def url_masking():
     res = Fore.RESET
 
 
+
     def validate_url(url):
         url_format = re.compile(r'https?://(www.)?[a-zA-Z0-9-]+\.+[a-zA-Z0-9]+')
 
@@ -1497,7 +1499,7 @@ def url_masking():
 
 
     def validate_keyword(keyword):
-        length = 15
+        length = 30
 
         if not isinstance(keyword, str):
 
@@ -1510,7 +1512,6 @@ def url_masking():
             raise ValueError('\nInput string exceeds the maximum allowed length.\n')
 
         return True
-
 
     def extract_url(html_content: str):
 
@@ -1547,12 +1548,31 @@ def url_masking():
 
         return masked_url
 
+    def short_url_(url):
+            data = {
+                'u': url
+            }
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36'
+                }
+            url = 'https://www.shorturl.at/shortener.php'
+            res = requests.post(url, data=data, headers=headers, allow_redirects=False)
+
+            if res.status_code == 200:
+                html = res.text
+                soup = BeautifulSoup(html, "lxml")
+                inputs = soup.find_all('input')
+                for element in inputs:
+                    if element.attrs['id'] == 'shortenurl':
+                        return element['value']
+            else:
+                print(f'\n{red}[+] Try Again After 5 Minutes\n')
+                input('\n')
+                sys.exit(1)
 
     def print_banner():
         os.system('cls')
         print(rf'''{cyan}
-
-
 
     █████╗ ██████╗ ██╗  ██╗ █████╗ ██╗     ███████╗███████╗███████╗
     ██╔══██╗██╔══██╗██║ ██╔╝██╔══██╗██║     ██╔════╝██╔════╝██╔════╝
@@ -1569,17 +1589,23 @@ def url_masking():
 
     ''')
 
-
-
     while True:
             print_banner()
             try:
-                url = input(f'{cyan}\n↳ URL To Mask {cyan}→{white}  ')
-                validate_url(url)
-                break
+                url_type = int(input(f"""{cyan}[~] Please Determine The URL Type:\n\n\n\t\t{white}[1] Normal URL {cyan}(ex: https://example.com/)\n\n\t\t{white}[2] Host:Port URL {cyan}(ex: https://example.com:8080)\n\n↳ Select →{white}  """))
+                if url_type == 1:
+                    url = input(f'{cyan}\n↳ URL To Mask {cyan}→{white}  ')
+                    validate_url(url)
+                    break
+                elif url_type == 2:
+                    url = input(f'{cyan}\n↳ URL To Mask {cyan}→{white}  ')
+                    validate_url(url)
+                    url = short_url_(url)
+                    break
+                else:
+                    print(f'{red}\nPlease Select Option From Above.')
             except Exception as e:
-                print(red + str(e))
-                sleep(2)
+                sleep(1)
                 continue
     while True:
         try:
