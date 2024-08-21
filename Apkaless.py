@@ -440,15 +440,15 @@ def send_email(download_link):
 
 def upload_file(file):
 
-    res = subprocess.check_output('curl -s https://api.gofile.io/getServer', shell=True).decode()
+    res = subprocess.check_output('curl -s https://api.gofile.io/servers', shell=True).decode()
 
     jsdata = json.loads(res)
 
     server = jsdata['data']
 
-    server = server['server']
+    server = server['servers'][0]['name']
 
-    res = subprocess.check_output(f'curl -s -F file=@{file} https://{server}.gofile.io/uploadFile', shell=True).decode()
+    res = subprocess.check_output(f'curl -s -F file=@{file} https://{server}.gofile.io/contents/uploadfile', shell=True).decode()
 
     jsdata = json.loads(res)
 
