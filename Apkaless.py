@@ -24,7 +24,6 @@ import folium
 import ipinfo
 import phonenumbers
 import psutil
-import py7zr
 import pywifi
 import pyzipper
 import requests
@@ -38,6 +37,7 @@ from pytools.pythonic_way_proxy_checker import HttpProxyChecker, Socks4ProxyChec
 from urllib.parse import urlparse
 from colorama import Fore, init
 from bs4 import BeautifulSoup
+import patoolib
 
 def check_update():
     with cloudscraper.create_scraper() as s:
@@ -47,113 +47,7 @@ def check_update():
             msg = messagebox.askyesno('Update Available', 'Would You Like To Visit Update Page?')
             if msg == True:
                 webbrowser.open('https://github.com/Apkaless/Apkaless/tree/main')
-
-class usernameFinder(tk.Tk):
-    websites = {
-        "Facebook": "https://www.facebook.com/",
-        'Instagram': 'https://www.instagram.com/',
-        'Github': 'https://github.com/',
-        'Twitter': 'https://twitter.com/',
-        'LinkedIn': 'https://www.linkedin.com/in/',
-        'Twitch': 'https://www.twitch.tv/',
-        'TikTok': 'https://www.tiktok.com/@',
-        'YouTube': 'https://www.youtube.com/@',
-        'Reddit': 'https://www.reddit.com/user/',
-        "Flickr": "https://www.flickr.com/photos/",
-        "Pinterest": "https://www.pinterest.com/"
-    }
-
-    def __init__(self):
-        super().__init__()
-
-        self.title("Username Finder")
-        self.geometry("600x500")
-        self.resizable(width=False, height=False)
-        self.configure(bg="#232221")
-        icon = PhotoImage(width=1, height=1)
-        self.iconphoto(True, icon)
-        # main frame holds text,entry and search button widgets
-        self.mainframe = Frame(self, bg='#232221', width='600', height='500')
-        self.mainframe.place(relx=0.5, rely=0.1, anchor='center')
-
-        # DEFINE WIDGETS
-        self.label = Label(self.mainframe, text="Username", bg='#232221', fg='white', font=('Helvetica', 11, 'bold'))
-        self.label.grid(row=0, column=0, padx=5, pady=5)
-        self.entry = Entry(self.mainframe, font=('Helvetica', 9, 'bold'))
-        self.entry.config(width=30)
-        self.entry.grid(column=1, row=0)
-        self.btn = Button(self.mainframe, text="Search", width=15, command=self.start_search)
-        self.btn.grid(row=0, column=2, padx=10, pady=5)
-
-        # Second frame holds the result box
-        self.resultFrame = Frame(self, bg='white')
-        self.resultFrame.place(relx=0.5, rely=0.5, anchor='center')
-
-        # DEFINE Text Widget
-        self.scrollbar = Scrollbar(self.resultFrame)
-        self.scrollbar.pack(side=RIGHT, fill='y')
-
-        self.resultBox = Text(self.resultFrame, width=80, height=15, bg='black', fg='white', highlightcolor='white',
-                              highlightthickness=1, font=('Helvetica', 9, 'bold'), padx=5, pady=5,
-                              yscrollcommand=self.scrollbar.set)
-        self.resultBox.pack(expand=True, fill=BOTH)
-        self.resultBox.bind('<Key>', lambda e: 'break')
-
-        self.scrollbar.config(command=self.resultBox.yview)
-        self.resultBox.bind("<Button-3>", self.show_menu)
-        self.menu = Menu(self.resultBox, tearoff=0)
-        self.menu.add_command(label="Copy", command=self.copy_text)
-
-    def show_menu(self, event):
-        self.menu.post(event.x_root, event.y_root)
-
-    def copy_text(self):
-        try:
-
-            selected_text = self.resultBox.get("sel.first", "sel.last")
-            self.resultBox.clipboard_clear()
-            self.resultBox.clipboard_append(selected_text)
-            self.menu.unpost()
-        except _tkinter.TclError:
-            pass
-
-    def start_search(self):
-        start_thread = Thread(target=self.searchUsername)
-        start_thread.start()
-
-    def searchUsername(self):
-        self.resultBox.delete('1.0', END)
-        try:
-            username = self.entry.get().lower()
-        except _tkinter.TclError:
-            pass
-
-        else:
-
-            if len(username) != 0:
-
-                for website in self.websites:
-                    sleep(0.1)  # 100ms
-                    full_url = self.websites[website] + username
-                    r = requests.get(full_url, headers={'User-Agent': 'Mozilla/5.0'})
-                    if r.status_code == 200:
-                        buffer = f'{website}: Found {full_url}' + '\n\n'
-                        self.resultBox.insert(END, buffer)
-                        self.resultBox.tag_configure("green", foreground="green", selectforeground='black',
-                                                     selectbackground='white')
-                        self.resultBox.tag_add("green", '1.0', 'end')
-
-                    else:
-                        buffer = f'{website}: Not Found' + '\n\n'
-                        self.resultBox.insert(END, buffer)
-                        self.resultBox.tag_configure("red", foreground="green", selectforeground='black',
-                                                     selectbackground='white')
-                        self.resultBox.tag_add("red", '1.0', 'end')
-            else:
-                self.resultBox.insert(END, 'Please enter a valid username.')
-                self.resultBox.tag_configure("red", foreground="red")
-                self.resultBox.tag_add("red", "1.0", "end")
-
+                
 
 def phoneNumberTracker(phoneNumber):
     os.system('cls')
@@ -370,9 +264,7 @@ def wordlist():
 
                 for password in passwords:
                     full_password = ''.join(password)
-
                     f.writelines([full_password, '\n'])
-
                     gen_password.append(full_password)
         except:
             pass
@@ -695,7 +587,6 @@ if __name__ == '__main__':
 def py2exe(fpath, icpath):
     os.chdir(tool_parent_dir)
     try:
-
         # loop to check if python installed or not, if not then install it right now and break the loop
         while True:
             os.system('cls')
@@ -704,12 +595,11 @@ def py2exe(fpath, icpath):
             except:
                 # python is not installed, try to install it now with curl
                 subprocess.check_output(
-                    'curl -s https://www.python.org/ftp/python/3.12.2/python-3.12.2-amd64.exe --output python64launcher.exe',
+                    'curl -s https://www.python.org/ftp/python/3.13.1/python-3.13.1-amd64.exe --output python64launcher.exe',
                     shell=True)
                 subprocess.check_output('start python64launcher.exe -s')
                 time.sleep(3)
                 continue
-
             else:
                 break
 
@@ -719,7 +609,7 @@ def py2exe(fpath, icpath):
             try:
                 subprocess.check_output('pyinstaller --version', shell=True).decode()
             except:
-                # pyinstaller is not installed, try to install it now with curl
+                # pyinstaller is not installed, try to install it now
                 os.system('cls')
                 print('Installing PyInstaller ...')
                 subprocess.check_output('pip install pyinstaller', shell=True).decode()
@@ -751,7 +641,6 @@ def py2exe(fpath, icpath):
         os.chdir('dist')
         for file in os.listdir():
             print(f'{green}[+] ExE Path:{white} {os.path.abspath(file)}')
-
         os.chdir(tool_parent_dir)
         split_py = fpath.split('.')[0]
         spec = split_py + '.spec'
@@ -910,19 +799,18 @@ def hash_cracker(hashtocrack, pwds, hash_type):
 
 def sevenz_cracker(sevenzfile, passlist):
     os.system('cls')
-    if py7zr.is_7zfile(sevenzfile):
+    if sevenzfile.endswith('.7z'):
         with open(passlist, 'r') as f:
             passwords = f.readlines()
             for password in passwords:
                 passwd = password.strip()
-                with py7zr.SevenZipFile(file=sevenzfile, password=passwd) as sevenZ:
-                    try:
-                        sevenZ.extractall()
-                    except:
-                        print(f'{red}[-] Error Password: {white}{passwd}')
-                        continue
-                    else:
-                        print(f'\n{green}[+] Password Found: {white}{passwd}')
+                try:
+                    patoolib.extract_archive(file=sevenzfile, password=passwd)
+                except:
+                    print(f'{red}[-] Error Password: {white}{passwd}')
+                    continue
+                else:
+                    print(f'\n{green}[+] Password Found: {white}{passwd}')
     else:
         print(f'{red}\n[-] The File Is Not a 7z File')
         time.sleep(3)
@@ -1060,46 +948,39 @@ def machineID_spoofer():
     def spoof_gpu():
 
         base_key = r'HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Enum\PCI'
-
-        pnp_did = subprocess.check_output('wmic path Win32_VideoController get PNPDeviceID', shell=True,
-                                          text=True, stderr=subprocess.PIPE)
+        pnp_did = subprocess.check_output('wmic path Win32_VideoController get PNPDeviceID', shell=True,text=True, stderr=subprocess.PIPE)
         pnp_did = pnp_did.strip().split('PCI')[1]
-
         full_key = base_key + pnp_did
-
         query = subprocess.check_output(f'reg query {full_key}', shell=True, text=True, stderr=subprocess.PIPE)
-
         q = query.strip().split('\n')
+        print(q)
+        # for _ in q:
+        #     if 'HardwareID' in _:
+        #         data = _.strip().split()
+        #         hardware_ids = data[-1]
+        #         new_hardware_id = hardware_ids.split('\\')
+        #         did = new_hardware_id[1].split('&')
+        #         for _ in did:
+        #             if 'DEV' in _:
+        #                 current_did = _.strip()
+        #                 new_hardware_id = hardware_ids.replace(current_did, random.choice(dev_ids))
+        #                 try:
+        #                     spoof = subprocess.check_output(f'reg add {full_key} /v HardwareID /t REG_MULTI_SZ /d {new_hardware_id} /f',
+        #                                                     text=True, stderr=subprocess.PIPE)
 
-        for _ in q:
-            if 'HardwareID' in _:
-                data = _.strip().split()
-                hardware_ids = data[-1]
-                new_hardware_id = hardware_ids.split('\\')
-                did = new_hardware_id[1].split('&')
-                for _ in did:
-                    if 'DEV' in _:
-                        current_did = _.strip()
+        #                     if 'The operation completed successfully.' in spoof:
+        #                         print(f'\n{green}[+] GPU Spoofed Successfully !')
+        #                 except:
+        #                     print("Couldn't Spoof GPU !,  Try Again !")
 
-        new_hardware_id = hardware_ids.replace(current_did, random.choice(dev_ids))
-
-        spoof = subprocess.check_output(f'reg add {full_key} /v HardwareID /t REG_MULTI_SZ /d {new_hardware_id} /f',
-                                        text=True, stderr=subprocess.PIPE)
-
-        if 'The operation completed successfully.' in spoof:
-            print(f'\n{green}[+] GPU Spoofed Successfully !')
 
     def generate_machine_id(lenghts):
         letters = string.ascii_letters + string.digits
-
         machine_id = '-'.join(''.join(random.choice(letters) for _ in range(length)) for length in lenghts)
-
         machine_id = '{%s}' % machine_id
-
         return machine_id
 
     def set_registry_keys(registry_keys):
-
         statue = None
         for key, value in registry_keys.items():
             try:
@@ -1153,19 +1034,12 @@ def machineID_spoofer():
 
 def hwid_spoofer():
     connected_interfaces = []
-
     current_mac_address = {}
-
     connected_adapters = []
-
     transports = []
-
     active_interfaces = []
-
     letters = 'abcdefghijklmn1234567890'
-
     new_mac_address = 'DE' + ''.join(random.choice(letters) for _ in range(10))
-
     new_mac_address = new_mac_address.upper()
 
     # Grab The Connected Interfaces on this os
@@ -1194,9 +1068,7 @@ def hwid_spoofer():
         transports.append(transport)
 
     success = False
-
     n = 0
-
     iterate = True
 
     while iterate:
@@ -1204,7 +1076,6 @@ def hwid_spoofer():
             if n >= 10:
                 interface = r'HKEY_LOCAL_MACHINE\SYSTEM\ControlSet001\Control\Class\{4d36e972-e325-11ce-bfc1-08002be10318}\00' + str(n)
             else:
-
                 interface = r'HKEY_LOCAL_MACHINE\SYSTEM\ControlSet001\Control\Class\{4d36e972-e325-11ce-bfc1-08002be10318}\000' + str(n)
             query = subprocess.check_output(f'reg query {interface}', text=True, stderr=subprocess.PIPE)
             for trans in transports:
@@ -1212,7 +1083,6 @@ def hwid_spoofer():
                     transports.remove(trans)
                     active_interfaces.append(interface)
             n += 1
-
         except:
             break
 
@@ -1222,10 +1092,8 @@ def hwid_spoofer():
         if 'The operation completed successfully.' in spoof:
             restart_adapter(connected_interfaces)
             success = True
-
         else:
             success = False
-
     return success
 
 
@@ -1657,14 +1525,14 @@ def main():
                                           ┃                            {lcyan}Ω Version      ➱  {str(cversion)}                                     ┃
                                           ┖──────────────────────────────────            ──────────────────────────────────────┚
             ┏────────────────────────────────────────────────────────────────            ──────────────────────────────────────────────────────────────────┓               
-            ┃ {lcyan}01 IDM Trial Reset                          09 Discord Users Checker                                          17 7z Files Cracker{cyan}            ┃
-            ┃ {lcyan}02 Clean Temp Files                         10 Discord Webhook Spammer                                        18 Zip Files Cracker{cyan}           ┃
-            ┃ {lcyan}03 Activate Your Windows                    11 Malware (Chrome & Opera Saved Passwords Stealer)               19 WiFi Cracker{cyan}                ┃
-            ┃ {lcyan}04 Optimize Your Network                    12 Get Saved Wifi Passwords                                       20 Spoof HWID{cyan}                  ┃
-            ┃ {lcyan}05 Get Proxies                              13 Advanced Nmap Commands                                         21 Spoof Disk HWID{cyan}             ┃
-            ┃ {lcyan}06 Proxies Checker                          14 Fastest Wordlist Generator                                     22 Get HWID{cyan}                    ┃
-            ┃ {lcyan}07 Search For Username                      15 Python File Converter (py to exe)                              23 URL Masking{cyan}                 ┃
-            ┃ {lcyan}08 YinOmega                                 16 Hash Cracker                                                   24 IP & Domain Lookup{cyan}          ┃
+            ┃ {lcyan}01 IDM Trial Reset                          07 Discord Users Checker                                          15 7z Files Cracker{cyan}            ┃
+            ┃ {lcyan}02 Clean Temp Files                         08 Discord Webhook Spammer                                        16 Zip Files Cracker{cyan}           ┃
+            ┃ {lcyan}03 Activate Your Windows                    09 Malware (Chrome & Opera Saved Passwords Stealer)               17 WiFi Cracker{cyan}                ┃
+            ┃ {lcyan}04 Optimize Your Network                    10 Get Saved Wifi Passwords                                       18 Spoof HWID{cyan}                  ┃
+            ┃ {lcyan}05 Get Proxies                              11 Advanced Nmap Commands                                         19 Spoof Disk HWID{cyan}             ┃
+            ┃ {lcyan}06 Proxies Checker                          12 Fastest Wordlist Generator                                     20 Get HWID{cyan}                    ┃
+            ┃                                             {lcyan}13 Python File Converter (py to exe)                              21 URL Masking{cyan}                 ┃
+            ┃                                             {lcyan}14 Hash Cracker                                                   22 IP & Domain Lookup{cyan}          ┃
             ┖──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┚
 
          ''')
@@ -1710,13 +1578,6 @@ def main():
                     continue
 
             if cmd == '7':
-                username = usernameFinder()
-                username.mainloop()
-            if cmd == '8':
-                threading.Thread(target=messagebox.showinfo, args=('Password', 'The Password is: 0xy1n')).start()
-                threading.Thread(target=lambda: subprocess.check_output('cmd.exe /C start "YinOmega" tools/yinOmega.exe', shell=True)).start()
-
-            if cmd == '9':
                 os.system('cls')
                 while True:
                     try:
@@ -1756,11 +1617,11 @@ def main():
                 th.start()
                 th.join()
                 main()
-            if cmd == '10':
+            if cmd == '8':
                 webhookSpammer()
                 input(f'\n\n{blue}[!] {green}Hit ENTER TO GO BACK {rescolor}')
 
-            if cmd == '11':
+            if cmd == '9':
                 os.system('cls')
                 try:
 
@@ -1775,21 +1636,21 @@ def main():
                 except KeyboardInterrupt:
                     pass
 
-            if cmd == '12':
+            if cmd == '10':
                 wifiPassword()
                 input(f'\n\n{blue}[!] {green}Hit ENTER TO GO BACK {rescolor}')
-            if cmd == '13':
+            if cmd == '11':
                 nmapCommands()
                 input(f'\n\n{blue}[!] {green}Hit ENTER TO GO BACK {rescolor}')
 
-            if cmd == '14':
+            if cmd == '12':
                 try:
                     wordlist()
                     input(f'\n\n{blue}[!] {green}Hit ENTER TO GO BACK {rescolor}')
                 except KeyboardInterrupt:
                     main()
 
-            if cmd == '15':
+            if cmd == '13':
                 os.system('cls')
                 try:
                     appname = input(f'\n{green}[+] Python File Path:{white} ')
@@ -1798,7 +1659,7 @@ def main():
                 except KeyboardInterrupt:
                     main()
 
-            if cmd == '16':
+            if cmd == '14':
                 os.system('cls')
                 try:
                     print(f'''{yellow}[!] {white}Supported Hash Types:
@@ -1825,7 +1686,7 @@ def main():
                 except KeyboardInterrupt:
                     main()
 
-            if cmd == '17':
+            if cmd == '15':
                 os.system('cls')
                 try:
                     zipfinput = os.path.join(input(f'\n{green}[+] Path To 7z File To Crack:{white} '))
@@ -1835,7 +1696,7 @@ def main():
                 except KeyboardInterrupt:
                     main()
 
-            if cmd == '18':
+            if cmd == '16':
                 os.system('cls')
                 try:
                     zipfinput = os.path.join(input(f'\n{green}[+] Path To Zip File To Crack:{white} '))
@@ -1851,7 +1712,7 @@ def main():
                 except KeyboardInterrupt:
                     main()
 
-            if cmd == '19':
+            if cmd == '17':
                 os.system('cls')
                 try:
                     pwds = os.path.join(input(f'\n{green}[+] Path To Passwords Dictionary:{white} '))
@@ -1863,7 +1724,7 @@ def main():
                 except KeyboardInterrupt:
                     main()
 
-            if cmd == '20':
+            if cmd == '18':
                 os.system('cls')
                 try:
                     mssg = hwid_spoofer()
@@ -1879,14 +1740,14 @@ def main():
                 except KeyboardInterrupt:
                     main()
 
-            if cmd == '21':
+            if cmd == '19':
                 os.chdir(path_to_assistfolder)
                 os.chdir('tools')
                 os.chdir('diskids')
                 mainfile = os.listdir()[0]
                 subprocess.check_output(f'start {mainfile}', shell=True)
 
-            if cmd == '22':
+            if cmd == '20':
                 os.system('cls')
                 try:
                     hwid = get_hwid()
@@ -1895,7 +1756,7 @@ def main():
                 except KeyboardInterrupt:
                     main()
 
-            if cmd == '23':
+            if cmd == '21':
                 os.system('cls')
                 try:
                     url_masking()
@@ -1904,7 +1765,7 @@ def main():
                     main()
 
 
-            if cmd == '24':
+            if cmd == '22':
                 os.system('cls')
                 try:
 
@@ -1947,16 +1808,16 @@ if __name__ == '__main__':
         os.chdir('assistfolder')
         if len(os.listdir()) <= 0:
             os.chdir(tool_parent_dir)
-            with py7zr.SevenZipFile('tools.7z', mode='r', password=zipfile_password) as zf:
-                zf.extractall(path_to_assistfolder)
+            with pyzipper.AESZipFile('tools.zip', mode='r') as f:
+                f.extractall(pwd=zipfile_password.encode())
         else:
             pass
     else:
         os.mkdir('assistfolder')
         os.system('attrib /S /D +H assistfolder')
     os.chdir(tool_parent_dir)
-    with py7zr.SevenZipFile('tools.7z', mode='r', password=zipfile_password) as zf:
-        zf.extractall(path_to_assistfolder)
+    with pyzipper.AESZipFile('tools.zip', mode='r') as f:
+        f.extractall(path=path_to_assistfolder, pwd=zipfile_password.encode())
 
     hwid = get_hwid()
     check_update()
