@@ -7,7 +7,6 @@ pyzipper
 ipinfo
 folium
 opencage
-py7zr
 psutil
 pywifi
 cloudscraper
@@ -22,3 +21,4 @@ beautifulsoup4
 comtypes
 random_user_agent
 bs4
+patool
