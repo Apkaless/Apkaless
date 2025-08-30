@@ -170,20 +170,6 @@ The application includes automatic update checking:
 - Prompts user to visit update page
 - Can be disabled in settings
 
-## 📁 File Structure
-
-```
-Apkaless/
-├── Apkaless.py              # Main application
-├── requirements.txt          # Dependencies
-├── README.md                # This file
-├── apkaless_config.ini      # Configuration file
-├── apkaless.log            # Application logs
-├── tools/                   # External tools
-├── pytools/                 # Python utilities
-└── output/                  # Generated files
-```
-
 ## 🤝 Contributing
 
 Contributions are welcome! Please:
@@ -213,3 +199,4 @@ This project is provided "as is" without warranty. Users are responsible for the
 ---
 
 **Remember**: Use this tool responsibly and only for educational purposes on systems you own or have permission to test.
+
