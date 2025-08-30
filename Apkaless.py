@@ -3134,9 +3134,9 @@ def enhanced_main():
             print(f'\n{cyan}╔══════════════════════════════════════════════════════════════════════════════════════════════════════╗')
             print(f'{cyan}║                                    {lcyan}🌐 NETWORK & WEB TOOLS{cyan}                                            ║')
             print(f'{cyan}╠══════════════════════════════════════════════════════════════════════════════════════════════════════╣')
-            print(f'{cyan}║  {lcyan}[16]{white} Discord Users Checker            {lcyan}[17]{white} Discord Webhook Spammer          {lcyan}[18]{white} URL Masking{cyan}        ║')
-            print(f'{cyan}║  {lcyan}[19]{white} IP & Domain Lookup               {lcyan}[20]{white} Public IP Lookup                 {lcyan}[21]{white} Phone Tracker{cyan}      ║')
-            print(f'{cyan}║  {lcyan}[22]{white} Advanced Nmap Commands           {lcyan}[23]{white} System Information               {lcyan}[24]{white} Python to EXE{cyan}      ║')
+            print(f'{cyan}║  {lcyan}[16]{white} Discord Users Checker           {lcyan}[17]{white} Discord Webhook Spammer           {lcyan}[18]{white} URL Masking{cyan}        ║')
+            print(f'{cyan}║  {lcyan}[19]{white} IP & Domain Lookup              {lcyan}[20]{white} Public IP Lookup                  {lcyan}[21]{white} Phone Tracker{cyan}      ║')
+            print(f'{cyan}║  {lcyan}[22]{white} Advanced Nmap Commands          {lcyan}[23]{white} System Information                {lcyan}[24]{white} Python to EXE{cyan}      ║')
             print(f'{cyan}╚══════════════════════════════════════════════════════════════════════════════════════════════════════╝{rescolor}')
             
             print(f'\n{cyan}╔══════════════════════════════════════════════════════════════════════════════════════════════════════╗')
