@@ -2414,7 +2414,101 @@ def hwid_spoofer():
     return success
 
 
-def proxy_gen():
+def enhanced_proxy_gen():
+    """Enhanced proxy generation with comprehensive scraping and validation"""
+    os.system('cls')
+    os.chdir(tool_parent_dir)
+    
+    try:
+        print(f'{cyan}╔══════════════════════════════════════════════════════════════════════════════╗')
+        print(f'{cyan}║                                PROXY GENERATOR                               ║')
+        print(f'{cyan}╚══════════════════════════════════════════════════════════════════════════════╝{rescolor}\n')
+        
+        # Import the enhanced proxy manager
+        try:
+            from pytools.proxy_manager import ProxyManager
+        except ImportError:
+            print(f'{red}[-] proxy modules not found. Using legacy proxy generation...{rescolor}')
+            legacy_proxy_gen()
+            return
+        
+        # Create proxy manager instance with optimized settings
+        proxy_manager = ProxyManager(max_scraper_threads=50, max_checker_threads=200, timeout=5)
+        
+        # Show options
+        print(f'{cyan}Available Options:{rescolor}')
+        print(f'{white}[1] Full workflow (Scrape + Check + Save){rescolor}')
+        print(f'{white}[2] Scrape proxies only{rescolor}')
+        print(f'{white}[3] Check existing proxy file{rescolor}')
+        print(f'{white}[4] Interactive proxy manager{rescolor}')
+        print(f'{white}[0] Back to main menu{rescolor}')
+        
+        choice = input(f'\n{green}[+] Select option:{white} ').strip()
+        
+        if choice == '1':
+            # Full workflow
+            print(f'{yellow}[!] Starting full proxy workflow...{rescolor}')
+            results = proxy_manager.full_proxy_workflow(check_proxies=True, save_results=True)
+            
+            if results['working_proxies']:
+                print(f'{green}[+] Successfully found {len(results["working_proxies"])} working proxies{rescolor}')
+            else:
+                print(f'{yellow}[!] No working proxies found{rescolor}')
+        
+        elif choice == '2':
+            # Scrape only
+            print(f'{yellow}[!] Scraping proxies from multiple sources...{rescolor}')
+            proxies = proxy_manager.scraper.scrape_all_sources()
+            
+            if proxies:
+                proxy_manager.scraper.print_statistics(proxies)
+                
+                # Save to the configured output directory
+                output_dir = proxy_manager.config['output_directory']
+                os.makedirs(output_dir, exist_ok=True)
+                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+                scraped_file = f'{output_dir}/scraped_proxies_{timestamp}.txt'
+                proxy_manager.scraper.save_proxies(proxies, scraped_file)
+                
+                print(f'{green}[+] Scraped {len(proxies)} proxies and saved to {output_dir}/{rescolor}')
+            else:
+                print(f'{red}[-] No proxies found{rescolor}')
+        
+        elif choice == '3':
+            # Check existing file
+            proxy_file = input(f'{green}[+] Enter proxy file path:{white} ').strip()
+            if os.path.exists(proxy_file):
+                print(f'{yellow}[!] Checking proxies in {proxy_file}...{rescolor}')
+                results = proxy_manager.quick_proxy_check(proxy_file)
+                
+                if results:
+                    working_count = len([r for r in results if r.is_working])
+                    print(f'{green}[+] Found {working_count} working proxies out of {len(results)} tested{rescolor}')
+                else:
+                    print(f'{red}[-] No proxies found in file{rescolor}')
+            else:
+                print(f'{red}[-] File not found: {proxy_file}{rescolor}')
+        
+        elif choice == '4':
+            # Interactive manager
+            proxy_manager.interactive_menu()
+        
+        elif choice == '0':
+            return
+        
+        else:
+            print(f'{red}[-] Invalid option{rescolor}')
+        
+    except Exception as e:
+        logger.error(f"proxy generation error: {e}")
+        print(f'{red}[-] Error in proxy generation: {e}{rescolor}')
+        print(f'{yellow}[!] Falling back to legacy proxy generation...{rescolor}')
+        legacy_proxy_gen()
+    
+    input(f'\n{blue}[!] Press Enter to continue...{rescolor}')
+
+def legacy_proxy_gen():
+    """Legacy proxy generation for backward compatibility"""
     global a, b, new
     from threading import Thread
     os.system('cls')
@@ -2455,19 +2549,73 @@ def proxy_gen():
     print(
         f'\n{green}[+] Total Proxies: {white}{b}\n{green}[+]{red} {b - a} Duplicated Proxies {green}Has Been Removed.\n{green}[+] Saved Into: {white}Scraped_proxies.txt')
 
+def proxy_gen():
+    """Main proxy generation function - now uses enhanced version"""
+    enhanced_proxy_gen()
 
-def proxy_check(prx_list):
+
+def enhanced_proxy_check(prx_list):
+    """Enhanced proxy checking with better validation and categorization"""
+    os.system('cls')
+    os.chdir(tool_parent_dir)
+    
+    try:
+        print(f'{cyan}╔══════════════════════════════════════════════════════════════════════════════╗')
+        print(f'{cyan}║                                 PROXY CHECKER                                ║')
+        print(f'{cyan}╚══════════════════════════════════════════════════════════════════════════════╝{rescolor}\n')
+        
+        # Check if enhanced modules are available
+        try:
+            from pytools.proxy_manager import ProxyManager
+        except ImportError:
+            print(f'{red}[-] proxy manager not found. Using legacy proxy checking...{rescolor}')
+            legacy_proxy_check(prx_list)
+            return
+        
+        # Create proxy manager instance with optimized settings
+        proxy_manager = ProxyManager(max_scraper_threads=50, max_checker_threads=200, timeout=5)
+        
+        # Load proxies from file
+        proxies = proxy_manager.checker.load_proxies_from_file(prx_list)
+        
+        if not proxies:
+            print(f'{red}[-] No proxies found in {prx_list}{rescolor}')
+            return
+        
+        print(f'{green}[+] Loaded {len(proxies)} proxies from {prx_list}{rescolor}')
+        print(f'{yellow}[!] Starting proxy validation...{rescolor}\n')
+        
+        # Check proxies with enhanced checker
+        results = proxy_manager.checker.check_proxies_batch(proxies, show_progress=True)
+        
+        # Show detailed statistics
+        proxy_manager.checker.print_statistics(results)
+        
+        # Save working proxies
+        working_results = [r for r in results if r.is_working]
+        if working_results:
+            proxy_manager.checker.save_detailed_json_report(results)
+            print(f'{green}[+] Successfully saved {len(working_results)} working proxies to {proxy_manager.config["output_directory"]}/{rescolor}')
+        else:
+            print(f'{yellow}[!] No working proxies found{rescolor}')
+        
+    except Exception as e:
+        logger.error(f"proxy checking error: {e}")
+        print(f'{red}[-] Error in proxy checking: {e}{rescolor}')
+        print(f'{yellow}[!] Falling back to legacy proxy checking...{rescolor}')
+        legacy_proxy_check(prx_list)
+
+def legacy_proxy_check(prx_list):
+    """Legacy proxy checking for backward compatibility"""
     os.system('cls')
     os.chdir(tool_parent_dir)
 
     def save_working(proxy, type):
-
         with open(f'{type}.txt', 'a') as f:
             f.writelines([proxy, '\n'])
             f.close()
 
     def check(proxy):
-
         http_prx = HttpProxyChecker(proxy, 10).start_checker()
         socks4_prx = Socks4ProxyChecker(proxy, 10).start_checker()
         socks5_prx = Socks5ProxyChecker(proxy, 10).start_checker()
@@ -2485,7 +2633,6 @@ def proxy_check(prx_list):
             errors.append(proxy)
 
     with open(prx_list, 'r') as f:
-
         proxies = []
         threds = []
         http_proxies = []
@@ -2505,6 +2652,10 @@ def proxy_check(prx_list):
             print(
                 f'\r{green}Http({len(http_proxies)}) :: {cyan}Socks4({len(socks4_proxies)}) :: {lmagenta}Socks5({len(socks5_proxies)}) :: {red}Errors({len(errors)})',
                 end='   ')
+
+def proxy_check(prx_list):
+    """Main proxy checking function - now uses enhanced version"""
+    enhanced_proxy_check(prx_list)
             
 
 def discordHunter(email, password):
