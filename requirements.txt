@@ -22,6 +22,7 @@ comtypes>=1.2.0
 random_user_agent>=1.0.1
 bs4>=0.0.1
 patool>=1.12
+py7zr>=0.20.0
 scapy>=2.5.0
 urllib3>=2.0.0
 lxml>=4.9.0

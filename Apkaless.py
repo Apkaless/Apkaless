@@ -38,6 +38,7 @@ from urllib.parse import urlparse
 from colorama import Fore, init
 from bs4 import BeautifulSoup
 import patoolib
+from pytools.system_tweaker import SystemTweaker, TweakResult
 from pathlib import Path
 import urllib3
 import ssl
@@ -372,7 +373,7 @@ def show_about_help():
         
         print(f'\n{cyan}══════════════════════════════════════════════════════════════════════════════{rescolor}')
         print(f'{cyan}Quick Tips:{rescolor}')
-        print(f'{white}• Use number keys (01-28) to navigate the menu{rescolor}')
+        print(f'{white}• Use number keys (01-27) to navigate the menu{rescolor}')
         print(f'{white}• Type 00 to exit the application{rescolor}')
         print(f'{white}• Check the settings menu (option 26) to customize the application{rescolor}')
         print(f'{white}• Use the system monitor (option 27) to track system performance{rescolor}')
@@ -1254,7 +1255,7 @@ def enhanced_zipfilecracker(zipf, passwordsList):
     
     # Banner
     print(f'{cyan}╔══════════════════════════════════════════════════════════════════════════════╗')
-    print(f'{cyan}║                        ENHANCED ZIP FILE CRACKER                            ║')
+    print(f'{cyan}║                                 ZIP FILE CRACKER                            ║')
     print(f'{cyan}╚══════════════════════════════════════════════════════════════════════════════╝{rescolor}\n')
     
     try:
@@ -1316,7 +1317,7 @@ def enhanced_zipfilecracker(zipf, passwordsList):
                     passwords_tested += 1
                     
                     try:
-                        zf.extractall(pwd=password.encode())
+                        zf.extractall(path=tool_parent_dir, pwd=password.encode())
                         elapsed = time.time() - start_time
                         
                         # Success! Save results
@@ -1363,7 +1364,7 @@ def enhanced_zipfilecracker(zipf, passwordsList):
                         passwords_tested += 1
                         
                         try:
-                            aesf.extractall(pwd=password.encode())
+                            aesf.extractall(path=tool_parent_dir, pwd=password.encode())
                             elapsed = time.time() - start_time
                             
                             # Success! Save results
@@ -1984,7 +1985,7 @@ def hash_cracker(hashtocrack, pwds, hash_type):
 def enhanced_sevenz_cracker(sevenzfile, passlist):
     """Enhanced 7z file cracker with progress tracking and better error handling"""
     os.system('cls')
-    
+
     try:
         # Validate input files
         if not os.path.exists(sevenzfile):
@@ -2003,7 +2004,7 @@ def enhanced_sevenz_cracker(sevenzfile, passlist):
             return
         
         print(f'{cyan}╔══════════════════════════════════════════════════════════════════════════════╗')
-        print(f'{cyan}║                           ENHANCED 7Z FILE CRACKER                          ║')
+        print(f'{cyan}║                               7Z FILE CRACKER                               ║')
         print(f'{cyan}╚══════════════════════════════════════════════════════════════════════════════╝{rescolor}\n')
         
         print(f'{green}[+] 7z file:{white} {sevenzfile}')
@@ -2044,7 +2045,7 @@ def enhanced_sevenz_cracker(sevenzfile, passlist):
                     
                     # Try to extract with current password
                     try:
-                        patoolib.extract_archive(file=sevenzfile, password=password)
+                        patoolib.extract_archive(sevenzfile, password=password, outdir=tool_parent_dir, verbosity=-2)
                         
                         # If we get here, password was correct
                         elapsed = time.time() - start_time
@@ -2052,7 +2053,6 @@ def enhanced_sevenz_cracker(sevenzfile, passlist):
                         print(f'{green}[+] Password:{white} {password}')
                         print(f'{green}[+] Time taken:{white} {elapsed:.2f} seconds')
                         print(f'{green}[+] Passwords tested:{white} {passwords_tested:,}')
-                        
                         password_found = True
                         
                         # Save results
@@ -2085,7 +2085,6 @@ def enhanced_sevenz_cracker(sevenzfile, passlist):
                         continue
                 
                 except Exception as e:
-                    logger.warning(f"Error testing password '{password}': {e}")
                     continue
         
         # If we get here, password wasn't found
@@ -2134,17 +2133,391 @@ def enhanced_sevenz_cracker(sevenzfile, passlist):
 
 
 def get_hwid():
-    mac_address = []
-    for interface, address in psutil.net_if_addrs().items():
-        for addr in address:
-            if addr.family == psutil.AF_LINK:
-                mac_address.append(addr.address)
-    else:
-        hostname = socket.gethostname()
-        unhashed_hwid = f'{hostname}' + ''.join(mac_address)
-        hashed_hwid = hashlib.md5(unhashed_hwid.encode('ascii')).hexdigest()
-        return hashed_hwid
+    """
+    Enhanced Hardware ID generator with multiple identification methods
+    Returns a unique hardware fingerprint based on multiple system characteristics
+    """
+    try:
+        hwid_components = []
+        
+        # 1. MAC Addresses (Network Interfaces)
+        try:
+            mac_addresses = []
+            for interface, addresses in psutil.net_if_addrs().items():
+                for addr in addresses:
+                    if addr.family == psutil.AF_LINK:
+                        mac_addresses.append(addr.address)
+            
+            if mac_addresses:
+                # Sort MAC addresses for consistency
+                mac_addresses.sort()
+                hwid_components.extend(mac_addresses)
+                print(f"{green}[+] {white}Found {cyan}{len(mac_addresses)}{white} network interfaces")
+        except Exception as e:
+            print(f"{yellow}[!] {white}Warning: Could not retrieve MAC addresses: {e}")
+        
+        # 2. Hostname
+        try:
+            hostname = socket.gethostname()
+            hwid_components.append(hostname)
+            print(f"{green}[+] {white}Hostname: {cyan}{hostname}{white}")
+        except Exception as e:
+            print(f"{yellow}[!] {white}Warning: Could not retrieve hostname: {e}")
+        
+        # 3. CPU Information
+        try:
+            cpu_info = psutil.cpu_count(logical=True)
+            cpu_freq = psutil.cpu_freq()
+            if cpu_freq:
+                cpu_mhz = int(cpu_freq.current)
+                hwid_components.append(f"CPU_{cpu_info}_{cpu_mhz}")
+                print(f"{green}[+] {white}CPU: {cyan}{cpu_info} cores @ {cpu_mhz} MHz{white}")
+        except Exception as e:
+            print(f"{yellow}[!] {white}Warning: Could not retrieve CPU info: {e}")
+        
+        # 4. Memory Information
+        try:
+            memory = psutil.virtual_memory()
+            memory_gb = int(memory.total / (1024**3))
+            hwid_components.append(f"RAM_{memory_gb}GB")
+            print(f"{green}[+] {white}Memory: {cyan}{memory_gb} GB{white}")
+        except Exception as e:
+            print(f"{yellow}[!] {white}Warning: Could not retrieve memory info: {e}")
+        
+        # 5. Disk Information
+        try:
+            disk_info = []
+            for partition in psutil.disk_partitions():
+                try:
+                    if partition.device and partition.device.startswith('/dev/'):
+                        # Linux/Unix systems
+                        disk_info.append(partition.device)
+                    elif partition.device and ':' in partition.device:
+                        # Windows systems
+                        disk_info.append(partition.device)
+                except:
+                    continue
+            
+            if disk_info:
+                # Use first few disk identifiers for consistency
+                disk_info = disk_info[:3]  # Limit to first 3 disks
+                hwid_components.extend(disk_info)
+                print(f"{green}[+] {white}Disks: {cyan}{len(disk_info)} partitions{white}")
+        except Exception as e:
+            print(f"{yellow}[!] {white}Warning: Could not retrieve disk info: {e}")
+        
+        # 6. System Architecture
+        try:
+            import platform
+            arch = platform.machine()
+            hwid_components.append(arch)
+            print(f"{green}[+] {white}Architecture: {cyan}{arch}{white}")
+        except Exception as e:
+            print(f"{yellow}[!] {white}Warning: Could not retrieve architecture: {e}")
+        
+        # 7. Operating System
+        try:
+            os_name = platform.system()
+            os_version = platform.version()
+            hwid_components.append(f"{os_name}_{os_version[:10]}")
+            print(f"{green}[+] {white}OS: {cyan}{os_name} {os_version[:20]}{white}")
+        except Exception as e:
+            print(f"{yellow}[!] {white}Warning: Could not retrieve OS info: {e}")
+        
+        # 8. Machine ID (if available)
+        try:
+            if platform.system() == "Linux":
+                with open('/etc/machine-id', 'r') as f:
+                    machine_id = f.read().strip()
+                    hwid_components.append(machine_id)
+                    print(f"{green}[+] {white}Machine ID: {cyan}{machine_id[:8]}...{white}")
+            elif platform.system() == "Windows":
+                # Try to get Windows Product ID
+                try:
+                    import subprocess
+                    result = subprocess.run(['wmic', 'csproduct', 'get', 'UUID'], 
+                                         capture_output=True, text=True, shell=True)
+                    if result.returncode == 0:
+                        lines = result.stdout.strip().split('\n')
+                        if len(lines) > 1:
+                            uuid = lines[1].strip()
+                            if uuid and uuid != "UUID":
+                                hwid_components.append(uuid)
+                                print(f"{green}[+] {white}Windows UUID: {cyan}{uuid[:8]}...{white}")
+                except:
+                    pass
+        except Exception as e:
+            print(f"{yellow}[!] {white}Warning: Could not retrieve machine ID: {e}")
+        
+        # Generate final HWID
+        if hwid_components:
+            # Sort components for consistency
+            hwid_components.sort()
+            unhashed_hwid = ''.join(hwid_components)
+            
+            # Create multiple hash types for different use cases
+            md5_hwid = hashlib.md5(unhashed_hwid.encode('utf-8')).hexdigest()
+            sha256_hwid = hashlib.sha256(unhashed_hwid.encode('utf-8')).hexdigest()
+            
+            print(f"\n{cyan}══════════════════════════════════════════════════════════════════════════════{white}")
+            print(f"{green}[+] {white}Hardware ID Generation Complete{white}")
+            print(f"{cyan}══════════════════════════════════════════════════════════════════════════════{white}")
+            print(f"{white}Components used: {cyan}{len(hwid_components)}{white}")
+            print(f"{white}MD5 HWID: {yellow}{md5_hwid}{white}")
+            print(f"{white}SHA256 HWID: {yellow}{sha256_hwid[:32]}...{white}")
+            print(f"{cyan}══════════════════════════════════════════════════════════════════════════════{white}")
+            
+            # Return MD5 hash for backward compatibility
+            return md5_hwid
+        else:
+            print(f"{red}[-] {white}Error: No hardware components could be identified{white}")
+            return None
+            
+    except Exception as e:
+        print(f"{red}[-] {white}Critical error in HWID generation: {e}{white}")
+        # Fallback to basic method
+        try:
+            hostname = socket.gethostname()
+            fallback_hwid = hashlib.md5(hostname.encode('ascii')).hexdigest()
+            print(f"{yellow}[!] {white}Using fallback HWID method{white}")
+            return fallback_hwid
+        except:
+            print(f"{red}[-] {white}Fallback HWID generation also failed{white}")
+            return None
 
+
+def get_detailed_hardware_info():
+    """
+    Get detailed hardware information for system analysis
+    """
+    try:
+        print(f"\n{cyan}══════════════════════════════════════════════════════════════════════════════{white}")
+        print(f"{green}🔍 DETAILED HARDWARE INFORMATION{white}")
+        print(f"{cyan}══════════════════════════════════════════════════════════════════════════════{white}")
+        
+        # CPU Information
+        try:
+            print(f"\n{white}📊 {cyan}PROCESSOR INFORMATION{white}")
+            print(f"{white}Physical cores: {yellow}{psutil.cpu_count(logical=False)}{white}")
+            print(f"{white}Logical cores: {yellow}{psutil.cpu_count(logical=True)}{white}")
+            
+            cpu_freq = psutil.cpu_freq()
+            if cpu_freq:
+                print(f"{white}Current frequency: {yellow}{cpu_freq.current:.1f} MHz{white}")
+                print(f"{white}Min frequency: {yellow}{cpu_freq.min:.1f} MHz{white}")
+                print(f"{white}Max frequency: {yellow}{cpu_freq.max:.1f} MHz{white}")
+            
+            print(f"{white}CPU usage: {yellow}{psutil.cpu_percent(interval=1)}%{white}")
+        except Exception as e:
+            print(f"{red}[-] CPU info error: {e}{white}")
+        
+        # Memory Information
+        try:
+            print(f"\n{white}💾 {cyan}MEMORY INFORMATION{white}")
+            memory = psutil.virtual_memory()
+            print(f"{white}Total RAM: {yellow}{memory.total / (1024**3):.1f} GB{white}")
+            print(f"{white}Available RAM: {yellow}{memory.available / (1024**3):.1f} GB{white}")
+            print(f"{white}Used RAM: {yellow}{memory.used / (1024**3):.1f} GB{white}")
+            print(f"{white}Memory usage: {yellow}{memory.percent}%{white}")
+        except Exception as e:
+            print(f"{red}[-] Memory info error: {e}{white}")
+        
+        # Disk Information
+        try:
+            print(f"\n{white}💿 {cyan}DISK INFORMATION{white}")
+            for partition in psutil.disk_partitions():
+                try:
+                    if partition.device and (partition.device.startswith('/dev/') or ':' in partition.device):
+                        usage = psutil.disk_usage(partition.mountpoint)
+                        print(f"{white}Device: {yellow}{partition.device}{white}")
+                        print(f"  Mountpoint: {cyan}{partition.mountpoint}{white}")
+                        print(f"  File system: {cyan}{partition.fstype}{white}")
+                        print(f"  Total: {yellow}{usage.total / (1024**3):.1f} GB{white}")
+                        print(f"  Used: {yellow}{usage.used / (1024**3):.1f} GB{white}")
+                        print(f"  Free: {yellow}{usage.free / (1024**3):.1f} GB{white}")
+                        print(f"  Usage: {yellow}{usage.percent}%{white}")
+                except:
+                    continue
+        except Exception as e:
+            print(f"{red}[-] Disk info error: {e}{white}")
+        
+        # Network Information
+        try:
+            print(f"\n{white}🌐 {cyan}NETWORK INFORMATION{white}")
+            interfaces = psutil.net_if_addrs()
+            for interface_name, interface_addresses in interfaces.items():
+                print(f"{white}Interface: {yellow}{interface_name}{white}")
+                for addr in interface_addresses:
+                    if addr.family == socket.AF_INET:
+                        print(f"  IPv4: {cyan}{addr.address}{white}")
+                    elif addr.family == socket.AF_INET6:
+                        print(f"  IPv6: {cyan}{addr.address}{white}")
+                    elif addr.family == psutil.AF_LINK:
+                        print(f"  MAC: {cyan}{addr.address}{white}")
+        except Exception as e:
+            print(f"{red}[-] Network info error: {e}{white}")
+        
+        print(f"\n{cyan}══════════════════════════════════════════════════════════════════════════════{white}")
+        
+    except Exception as e:
+        print(f"{red}[-] {white}Error getting detailed hardware info: {e}{white}")
+
+
+def list_hwid_reports():
+    """
+    List all existing HWID reports in the current directory
+    """
+    try:
+        import os
+        import glob
+        
+        current_dir = os.getcwd()
+        print(f"{cyan}[!] {white}Searching for HWID reports in: {yellow}{current_dir}{white}")
+        
+        # Search for HWID report files
+        pattern = os.path.join(current_dir, "hwid_report_*.txt")
+        report_files = glob.glob(pattern)
+        
+        if report_files:
+            print(f"\n{green}[+] {white}Found {cyan}{len(report_files)}{white} HWID report(s):{white}")
+            print(f"{cyan}══════════════════════════════════════════════════════════════════════════════{white}")
+            
+            for i, report_file in enumerate(sorted(report_files, key=os.path.getmtime, reverse=True), 1):
+                try:
+                    file_size = os.path.getsize(report_file)
+                    file_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(os.path.getmtime(report_file)))
+                    filename = os.path.basename(report_file)
+                    
+                    print(f"{white}[{i:2d}] {cyan}{filename}{white}")
+                    print(f"     {white}Size: {yellow}{file_size:,} bytes{white}")
+                    print(f"     {white}Created: {yellow}{file_time}{white}")
+                    print(f"     {white}Path: {cyan}{report_file}{white}")
+                    print()
+                except Exception as e:
+                    print(f"{red}[-] {white}Error reading file info: {e}{white}")
+            
+            print(f"{cyan}══════════════════════════════════════════════════════════════════════════════{white}")
+        else:
+            print(f"\n{yellow}[!] {white}No HWID reports found in current directory{white}")
+            print(f"{yellow}[!] {white}Reports will be saved here when generated{white}")
+        
+        return report_files
+        
+    except Exception as e:
+        print(f"{red}[-] {white}Error listing HWID reports: {e}{white}")
+        return []
+
+
+def generate_hwid_report():
+    """
+    Generate a comprehensive HWID report and save to file
+    """
+    try:
+        timestamp = time.strftime("%Y%m%d_%H%M%S")
+        filename = f"hwid_report_{timestamp}.txt"
+        
+        # Get absolute path for the file
+        import os
+        current_dir = os.getcwd()
+        full_path = os.path.join(current_dir, filename)
+        
+        # Ensure we're in the right directory
+        if not os.path.exists(current_dir):
+            # Fallback to user's desktop or current script directory
+            try:
+                import pathlib
+                script_dir = pathlib.Path(__file__).parent.absolute()
+                current_dir = str(script_dir)
+                full_path = os.path.join(current_dir, filename)
+                print(f"{yellow}[!] {white}Changed to script directory: {cyan}{current_dir}{white}")
+            except:
+                pass
+        
+        print(f"{cyan}[!] {white}Generating HWID report...{white}")
+        print(f"{cyan}[!] {white}Current directory: {yellow}{current_dir}{white}")
+        print(f"{cyan}[!] {white}Target file: {yellow}{filename}{white}")
+        print(f"{cyan}[!] {white}Full path: {yellow}{full_path}{white}")
+        
+        with open(full_path, 'w', encoding='utf-8') as f:
+            f.write("=" * 80 + "\n")
+            f.write("HARDWARE ID REPORT\n")
+            f.write("=" * 80 + "\n")
+            f.write(f"Generated: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+            f.write(f"System: {platform.system()} {platform.release()}\n")
+            f.write(f"Architecture: {platform.machine()}\n")
+            f.write(f"Report Location: {full_path}\n")
+            f.write("=" * 80 + "\n\n")
+            
+            # Get HWID
+            print(f"{cyan}[!] {white}Generating hardware ID...{white}")
+            hwid = get_hwid()
+            if hwid:
+                f.write(f"Hardware ID (MD5): {hwid}\n")
+                f.write(f"Hardware ID (SHA256): {hashlib.sha256(hwid.encode('utf-8')).hexdigest()}\n\n")
+                print(f"{green}[+] {white}HWID generated and added to report{white}")
+            else:
+                f.write("Hardware ID: FAILED TO GENERATE\n\n")
+                print(f"{red}[-] {white}Failed to generate HWID{white}")
+            
+            # Get detailed info
+            f.write("DETAILED HARDWARE INFORMATION\n")
+            f.write("-" * 40 + "\n")
+            
+            # CPU
+            try:
+                f.write(f"CPU Cores: {psutil.cpu_count(logical=True)}\n")
+                cpu_freq = psutil.cpu_freq()
+                if cpu_freq:
+                    f.write(f"CPU Frequency: {cpu_freq.current:.1f} MHz\n")
+            except:
+                f.write("CPU Info: UNAVAILABLE\n")
+            
+            # Memory
+            try:
+                memory = psutil.virtual_memory()
+                f.write(f"Total RAM: {memory.total / (1024**3):.1f} GB\n")
+            except:
+                f.write("Memory Info: UNAVAILABLE\n")
+            
+            # Network interfaces
+            try:
+                f.write("\nNetwork Interfaces:\n")
+                for interface, addresses in psutil.net_if_addrs().items():
+                    f.write(f"  {interface}:\n")
+                    for addr in addresses:
+                        if addr.family == psutil.AF_LINK:
+                            f.write(f"    MAC: {addr.address}\n")
+                        elif addr.family == socket.AF_INET:
+                            f.write(f"    IPv4: {addr.address}\n")
+            except:
+                f.write("Network Info: UNAVAILABLE\n")
+            
+            # Add file size and creation info
+            f.write("\n" + "=" * 80 + "\n")
+            f.write("REPORT METADATA\n")
+            f.write("=" * 80 + "\n")
+            f.write(f"File created: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+            f.write(f"File location: {full_path}\n")
+            f.write(f"Generated by: Apkaless Multi-Tool Suite\n")
+            f.write(f"Version: {cversion if 'cversion' in globals() else 'Unknown'}\n")
+        
+        # Verify file was created and get its size
+        if os.path.exists(full_path):
+            file_size = os.path.getsize(full_path)
+            print(f"{green}[+] {white}HWID report saved successfully!{white}")
+            print(f"{green}[+] {white}File: {cyan}{filename}{white}")
+            print(f"{green}[+] {white}Full path: {cyan}{full_path}{white}")
+            print(f"{green}[+] {white}File size: {cyan}{file_size:,} bytes{white}")
+            return full_path
+        else:
+            print(f"{red}[-] {white}Error: File was not created{white}")
+            return None
+        
+    except Exception as e:
+        print(f"{red}[-] {white}Error generating HWID report: {e}{white}")
+        import traceback
+        traceback.print_exc()
+        return None
 
 def crack_wifi(dictionary):
     os.system('cls')
@@ -3262,7 +3635,7 @@ def enhanced_main():
             print(f'{cyan}╔══════════════════════════════════════════════════════════════════════════════════════════════════════╗')
             print(f'{cyan}║                                    {lcyan}🚀 APKALESS MULTI-TOOL SUITE 🚀{cyan}                                   ║')
             print(f'{cyan}╠══════════════════════════════════════════════════════════════════════════════════════════════════════╣')
-            print(f'{cyan}║  {lcyan}👤 User:{white} {username:<12} {lcyan}🕐 Time:{white} {current_time:<12} {lcyan}📅 Date:{white} {current_date:<25}{cyan}                      ║')
+            print(f'{cyan}║  {lcyan}👤 User:{white} {username:<12} {lcyan}🕐 Time:{white} {current_time:<12} {lcyan}📅 Date:{white} {current_date:<29}{cyan}                  ║')
             print(f'{cyan}║  {lcyan}💻 CPU:{white} {cpu_percent:>3.0f}%{cyan} {' ' * 8} {lcyan}🧠 RAM:{white} {memory_percent:>3.0f}%{cyan} {' ' * 8} {lcyan}💾 Disk:{white} {disk_percent:>3.0f}%{cyan} {' ' * 8}                                  ║')
             print(f'{cyan}╚══════════════════════════════════════════════════════════════════════════════════════════════════════╝{rescolor}')
             
@@ -3271,8 +3644,9 @@ def enhanced_main():
             print(f'{cyan}║                                    {lcyan}🔧 SYSTEM TOOLS & UTILITIES{cyan}                                       ║')
             print(f'{cyan}╠══════════════════════════════════════════════════════════════════════════════════════════════════════╣')
             print(f'{cyan}║  {lcyan}[01]{white} IDM Trial Reset                 {lcyan}[02]{white} Clean Temp Files                  {lcyan}[03]{white} Activate Windows{cyan}   ║')
-            print(f'{cyan}║  {lcyan}[04]{white} Network Optimizer               {lcyan}[05]{white} Get Proxies                       {lcyan}[06]{white} Proxy Checker{cyan}      ║')
-            print(f'{cyan}║  {lcyan}[07]{white} Get HWID                        {lcyan}[08]{white} Spoof HWID                        {lcyan}[09]{white} Spoof Disk HWID{cyan}    ║')
+            print(f'{cyan}║  {lcyan}[04]{white} Network Optimizer               {lcyan}[05]{white} System Information                {lcyan}[06]{white} Python To EXE{cyan}      ║')
+            print(f'{cyan}║  {lcyan}[07]{white} Get HWID                        {lcyan}[08]{white} System Spoofer{cyan}                    {lcyan}[09]{white} System Tweaker{cyan}     ║')
+            print(f'{cyan}║                                                                                                      ║')
             print(f'{cyan}╚══════════════════════════════════════════════════════════════════════════════════════════════════════╝{rescolor}')
             
             print(f'\n{cyan}╔══════════════════════════════════════════════════════════════════════════════════════════════════════╗')
@@ -3287,7 +3661,7 @@ def enhanced_main():
             print(f'{cyan}╠══════════════════════════════════════════════════════════════════════════════════════════════════════╣')
             print(f'{cyan}║  {lcyan}[16]{white} Discord Users Checker           {lcyan}[17]{white} Discord Webhook Spammer           {lcyan}[18]{white} URL Masking{cyan}        ║')
             print(f'{cyan}║  {lcyan}[19]{white} IP & Domain Lookup              {lcyan}[20]{white} Public IP Lookup                  {lcyan}[21]{white} Phone Tracker{cyan}      ║')
-            print(f'{cyan}║  {lcyan}[22]{white} Advanced Nmap Commands          {lcyan}[23]{white} System Information                {lcyan}[24]{white} Python to EXE{cyan}      ║')
+            print(f'{cyan}║  {lcyan}[22]{white} Advanced Nmap Commands          {lcyan}[23]{white} Proxy Scraper                     {lcyan}[24]{white} Proxy Checker{cyan}      ║')
             print(f'{cyan}╚══════════════════════════════════════════════════════════════════════════════════════════════════════╝{rescolor}')
             
             print(f'\n{cyan}╔══════════════════════════════════════════════════════════════════════════════════════════════════════╗')
@@ -3334,11 +3708,119 @@ def enhanced_main():
                 
             elif cmd == '2':
                 try:
-                    subprocess.check_output('cmd.exe /C start "Cleaner" tools/cleaner.exe', shell=True)
-                    print(f'\n{green}[+] Temp File Cleaner launched successfully!{rescolor}')
+                    from pytools.system_cleaner import SystemCleaner
+                    cleaner = SystemCleaner()
+                    while True:
+                        os.system('cls')
+                        print(f'{cyan}╔══════════════════════════════════════════════════════════════════════════════╗')
+                        print(f'{cyan}║                              ADVANCED SYSTEM CLEANER                         ║')
+                        print(f'{cyan}╚══════════════════════════════════════════════════════════════════════════════╝{rescolor}\n')
+
+                        def print_result(result):
+                            status = f"{green}[SUCCESS]{rescolor}" if result.success else f"{red}[FAILED]{rescolor}"
+                            print(f"{status} {white}{result.message}{rescolor}")
+
+                        try:
+                            print(f'{cyan}Available Cleanup Options:{rescolor}\n')
+                            print(f'{white}[1]{rescolor} Clean Temporary Files')
+                            print(f'{white}[2]{rescolor} Clean Browser Cache')
+                            print(f'{white}[3]{rescolor} Clean System Logs')
+                            print(f'{white}[4]{rescolor} Clean Windows Update Cache (Admin)')
+                            print(f'{white}[5]{rescolor} Clean Prefetch Files (Admin)')
+                            print(f'{white}[6]{rescolor} Clean Recent Files')
+                            print(f'{white}[7]{rescolor} Empty Recycle Bin')
+                            print(f'{white}[8]{rescolor} Run Disk Cleanup')
+                            print(f'{white}[9]{rescolor} Comprehensive Clean')
+                            print(f'{white}[10]{rescolor} System Information')
+                            print(f'{white}[0]{rescolor} Back to main menu')
+
+                            choice = input(f'\n{green}[+] {white}Choose option (0-10): {rescolor}').strip()
+
+                            if choice == '0':
+                                break
+                            elif choice == '1':
+                                os.system('cls')
+                                print_result(cleaner.clean_temp_files())
+                                input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
+                            elif choice == '2':
+                                os.system('cls')
+                                print_result(cleaner.clean_browser_cache())
+                                input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
+                            elif choice == '3':
+                                os.system('cls')
+                                print_result(cleaner.clean_system_logs())
+                                input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
+                            elif choice == '4':
+                                os.system('cls')
+                                print_result(cleaner.clean_windows_update_cache())
+                                input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
+                            elif choice == '5':
+                                os.system('cls')
+                                print_result(cleaner.clean_prefetch_files())
+                                input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
+                            elif choice == '6':
+                                os.system('cls')
+                                print_result(cleaner.clean_recent_files())
+                                input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
+                            elif choice == '7':
+                                os.system('cls')
+                                print_result(cleaner.clean_recycle_bin())
+                                input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
+                            elif choice == '8':
+                                os.system('cls')
+                                print_result(cleaner.clean_disk_cleanup())
+                                input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
+                            elif choice == '9':
+                                os.system('cls')
+                                print(f'{yellow}[!] {white}Starting comprehensive system cleanup...{rescolor}')
+                                print(f'{yellow}[!] {white}This may take several minutes. Please wait...{rescolor}')
+                                input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
+                                
+                                results = cleaner.comprehensive_clean()
+                                os.system('cls')
+                                print(f'{cyan}╔══════════════════════════════════════════════════════════════════════════════╗')
+                                print(f'{cyan}║                              CLEANUP SUMMARY                                 ║')
+                                print(f'{cyan}╚══════════════════════════════════════════════════════════════════════════════╝{rescolor}\n')
+                                
+                                total_items = 0
+                                total_size = 0
+                                for result in results:
+                                    print_result(result)
+                                    total_items += result.items_cleaned
+                                    total_size += result.space_freed
+                                
+                                print(f'\n{green}🎉 TOTAL CLEANUP RESULTS:{rescolor}')
+                                print(f'{white}• Items cleaned: {total_items:,}{rescolor}')
+                                print(f'{white}• Space freed: {cleaner._format_size(total_size)}{rescolor}')
+                                input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
+                            elif choice == '10':
+                                os.system('cls')
+                                info = cleaner.get_system_info()
+                                print(f'{cyan}╔══════════════════════════════════════════════════════════════════════════════╗')
+                                print(f'{cyan}║                            SYSTEM INFORMATION                                ║')
+                                print(f'{cyan}╚══════════════════════════════════════════════════════════════════════════════╝{rescolor}\n')
+                                
+                                for key, value in info.items():
+                                    if key != 'error':
+                                        print(f'{white}{key.replace("_", " ").title()}:{rescolor} {green}{value}{rescolor}')
+                                
+                                if 'error' in info:
+                                    print(f'{red}Error: {info["error"]}{rescolor}')
+                                
+                                input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
+                            else:
+                                print(f'{red}[-] Invalid option. Choose 0-10.{rescolor}')
+                                time.sleep(1)
+                                os.system('cls')
+                        except KeyboardInterrupt:
+                            break
+                        except Exception as e:
+                            print(f'\n{red}[-] System Cleaner error: {e}{rescolor}')
+                            input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
+
                 except Exception as e:
-                    print(f'\n{red}[-] Failed to launch Temp File Cleaner: {e}{rescolor}')
-                input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
+                    print(f'\n{red}[-] Failed to open System Cleaner: {e}{rescolor}')
+                    input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
                 
             elif cmd == '3':
                 try:
@@ -3359,59 +3841,302 @@ def enhanced_main():
                 
             elif cmd == '5':
                 try:
-                    proxy_gen()
+                    os.system('cls')
+                    enhanced_sysinfo()
                     input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
                 except Exception as e:
-                    print(f'\n{red}[-] Proxy generation failed: {e}{rescolor}')
+                    print(f'\n{red}[-] System info failed: {e}{rescolor}')
                     input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
                     
             elif cmd == '6':
                 try:
                     os.system('cls')
-                    prxlistinput = os.path.join(input(f'\n{green}[+] Path To Proxies List To Check:{white} '))
-                    proxy_check(prxlistinput)
+                    appname = input(f'\n{green}[+] Python File Path:{white} ')
+                    appico = input(f'{green}[+] Icon Path (press Enter to skip):{white} ')
+                    if appico.strip() == '':
+                        appico = None
+                    enhanced_py2exe(appname, appico)
                     input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
+                except KeyboardInterrupt:
+                    continue
                 except Exception as e:
-                    print(f'\n{red}[-] Proxy checking failed: {e}{rescolor}')
+                    print(f'\n{red}[-] Python to EXE conversion failed: {e}{rescolor}')
                     input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
                     
             elif cmd == '7':
                 try:
-                    hwid = get_hwid()
-                    print(f'\n{green}[+] Current HWID:{white} {hwid}{rescolor}')
-                    input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
-                except Exception as e:
-                    print(f'\n{red}[-] Failed to get HWID: {e}{rescolor}')
+                    os.system('cls')
+                    print(f'{cyan}══════════════════════════════════════════════════════════════════════════════{white}')
+                    print(f'{green}🔧 HWID TOOLS & HARDWARE INFORMATION{white}')
+                    print(f'{cyan}══════════════════════════════════════════════════════════════════════════════{white}')
+                    print(f'{white}[1] {cyan}Generate Basic HWID{white}')
+                    print(f'{white}[2] {cyan}Get Detailed Hardware Info{white}')
+                    print(f'{white}[3] {cyan}Generate Comprehensive HWID Report{white}')
+                    print(f'{white}[4] {cyan}List Existing HWID Reports{white}')
+                    print(f'{white}[5] {cyan}Back to Main Menu{white}')
+                    print(f'{cyan}══════════════════════════════════════════════════════════════════════════════{white}')
+                    
+                    hwid_choice = input(f'\n{green}[+] {white}Choose HWID option (1-5): {white}').strip()
+                    
+                    if hwid_choice == '1':
+                        os.system('cls')
+                        print(f'{cyan}══════════════════════════════════════════════════════════════════════════════{white}')
+                        print(f'{green}🔍 GENERATING HARDWARE ID{white}')
+                        print(f'{cyan}══════════════════════════════════════════════════════════════════════════════{white}')
+                        
+                        hwid = get_hwid()
+                        if hwid:
+                            print(f'\n{green}[+] {white}HWID Generation Complete!{white}')
+                            print(f'{green}[+] {white}Current HWID: {yellow}{hwid}{white}')
+                        else:
+                            print(f'\n{red}[-] {white}Failed to generate HWID{white}')
+                        
+                    elif hwid_choice == '2':
+                        os.system('cls')
+                        get_detailed_hardware_info()
+                        
+                    elif hwid_choice == '3':
+                        os.system('cls')
+                        print(f'{cyan}══════════════════════════════════════════════════════════════════════════════{white}')
+                        print(f'{green}📋 GENERATING COMPREHENSIVE HWID REPORT{white}')
+                        print(f'{cyan}══════════════════════════════════════════════════════════════════════════════{white}')
+                        
+                        report_file = generate_hwid_report()
+                        if report_file:
+                            print(f'\n{green}[+] {white}Report generated successfully!{white}')
+                            print(f'{green}[+] {white}File: {cyan}{report_file}{white}')
+                            
+                            # Ask if user wants to open the file
+                            try:
+                                open_choice = input(f'\n{yellow}[!] {white}Open the generated report? (y/n): {white}').strip().lower()
+                                if open_choice in ['y', 'yes']:
+                                    import platform
+                                    if platform.system() == 'Windows':
+                                        os.startfile(report_file)
+                                    elif platform.system() == 'Darwin':  # macOS
+                                        subprocess.run(['open', report_file])
+                                    else:  # Linux
+                                        subprocess.run(['xdg-open', report_file])
+                                    print(f'{green}[+] {white}Report opened successfully!{white}')
+                            except Exception as e:
+                                print(f'{yellow}[!] {white}Could not open file automatically: {e}{white}')
+                                print(f'{yellow}[!] {white}Please open manually: {cyan}{report_file}{white}')
+                        else:
+                            print(f'\n{red}[-] {white}Failed to generate report{white}')
+                            
+                    elif hwid_choice == '4':
+                        os.system('cls')
+                        print(f'{cyan}══════════════════════════════════════════════════════════════════════════════{white}')
+                        print(f'{green}📋 LISTING EXISTING HWID REPORTS{white}')
+                        print(f'{cyan}══════════════════════════════════════════════════════════════════════════════{white}')
+                        
+                        list_hwid_reports()
+                        
+                    elif hwid_choice == '5':
+                        continue
+                    else:
+                        print(f'\n{red}[-] {white}Invalid choice! Please select 1-5.{white}')
+                        time.sleep(2)
+                        continue
+                        
                     input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
                     
+                except Exception as e:
+                    print(f'\n{red}[-] HWID operation failed: {e}{rescolor}')
+                    input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
+                    
+                
             elif cmd == '8':
                 try:
-                    mssg = hwid_spoofer()
-                    machine_id = machineID_spoofer()
-                    if mssg and machine_id:
-                        print(f'\n{green}[+] MAC Address Spoofed Successfully!{rescolor}')
-                        print(f'{green}[+] HWIDs Spoofed Successfully!{rescolor}')
-                        print(f'{green}[+] New HWID is: {get_hwid()}{rescolor}')
-                        print(f'{yellow}[!] Old HWID was: {hwid}{rescolor}')
-                    else:
-                        print(f'{red}[-] There was an error while spoofing HWIDs.{rescolor}')
-                    input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
-                except Exception as e:
-                    print(f'\n{red}[-] HWID spoofing failed: {e}{rescolor}')
+                    os.system('cls')
+                    print(f'{cyan}╔══════════════════════════════════════════════════════════════════════════════╗')
+                    print(f'{cyan}║                               SYSTEM SPOOFER                                 ║')
+                    print(f'{cyan}╚══════════════════════════════════════════════════════════════════════════════╝{rescolor}\n')
+                    
+                    print(f'{yellow}[!] {white}This tool will spoof multiple system identifiers:{rescolor}')
+                    print(f'{blue}•{white} Machine GUID, Product ID, HW Profile GUID')
+                    print(f'{blue}•{white} MAC Address, Display ID, GPU ID')
+                    print(f'{blue}•{white} BIOS Information, Disk Serial Numbers')
+                    print(f'{blue}•{white} Machine ID and other system identifiers{rescolor}\n')
+                    
+                    print(f'{cyan}Choose spoofing mode:{rescolor}')
+                    print(f'{blue}[1]{white} Comprehensive Spoof (All features)')
+                    print(f'{blue}[2]{white} Quick Spoof (Essential only)')
+                    print(f'{blue}[3]{white} List Backups')
+                    print(f'{blue}[4]{white} Restore from Backup')
+                    print(f'{blue}[5]{white} Back to Main Menu{rescolor}\n')
+                    
+                    try:
+                        from pytools.enhanced_spoofer import EnhancedSpoofer
+                        spoofer = EnhancedSpoofer()
+                        
+                        while True:
+                            choice = input(f'{green}[+] {white}Enter your choice (1-5): ').strip()
+                            
+                            if choice == '1':
+                                print(f'\n{yellow}[!] {white}Starting comprehensive system spoofing...{rescolor}')
+                                print(f'{yellow}[!] {white}This may take several minutes. Please wait...{rescolor}')
+                                input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
+                                
+                                try:
+                                    spoofer.comprehensive_spoof()
+                                except Exception as e:
+                                    print(f'\n{red}[-] Comprehensive spoofing failed: {e}{rescolor}')
+                                    
+                                input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
+                                break
+                                
+                            elif choice == '2':
+                                print(f'\n{yellow}[!] {white}Starting quick essential spoofing...{rescolor}')
+                                input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
+                                
+                                try:
+                                    spoofer.quick_spoof()
+                                except Exception as e:
+                                    print(f'\n{red}[-] Quick spoofing failed: {e}{rescolor}')
+                                    
+                                input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
+                                break
+                                
+                            elif choice == '3':
+                                spoofer.list_backups()
+                                input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
+                                break
+                                
+                            elif choice == '4':
+                                backup_file = input(f'{green}[+] {white}Enter backup file name: ').strip()
+                                if backup_file:
+                                    backup_path = os.path.join(spoofer.backup_dir, backup_file)
+                                    spoofer.restore_from_backup(backup_path)
+                                else:
+                                    print(f'{red}[-] No backup file specified{rescolor}')
+                                input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
+                                break
+                                
+                            elif choice == '5':
+                                break
+                            else:
+                                print(f'{red}[-] Invalid choice. Please enter 1-5.{rescolor}')
+                                
+                    except Exception as e:
+                        print(f'{red}[-] Spoofer initialization failed: {e}{rescolor}')
+                        
                     input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
                     
-            elif cmd == '9':
-                try:
-                    os.chdir(path_to_assistfolder)
-                    os.chdir('tools')
-                    os.chdir('diskids')
-                    mainfile = os.listdir()[0]
-                    subprocess.check_output(f'start {mainfile}', shell=True)
-                    print(f'\n{green}[+] Disk HWID Spoofer launched successfully!{rescolor}')
                 except Exception as e:
-                    print(f'\n{red}[-] Failed to launch Disk HWID Spoofer: {e}{rescolor}')
-                input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
-                
+                    print(f'\n{red}[-] System Spoofer failed: {e}{rescolor}')
+                    input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
+            
+            elif cmd == "9":
+                try:
+                    os.system('cls')
+                    print(f'{cyan}╔══════════════════════════════════════════════════════════════════════════════╗')
+                    print(f'{cyan}║                                 SYSTEM TWEAKER                               ║')
+                    print(f'{cyan}╚══════════════════════════════════════════════════════════════════════════════╝{rescolor}\n')
+
+                    tw = SystemTweaker()
+
+                    def print_result(res):
+                        try:
+                            # TweakResult dataclass
+                            status = f"{green}[SUCCESS]{rescolor}" if res.success else f"{red}[FAILED]{rescolor}"
+                            print(f"{status} {white}{res.message}{rescolor}")
+                        except Exception:
+                            print(res)
+
+                    while True:
+                        try:
+                            print(f'{cyan}Available Tweaks:{rescolor}')
+                            print(f'{white}[1]{rescolor} Flush DNS cache')
+                            print(f'{white}[2]{rescolor} Reset Winsock (admin)')
+                            print(f'{white}[3]{rescolor} Reset IP stack IPv4/IPv6 (admin)')
+                            print(f'{white}[4]{rescolor} Set DNS for adapters (admin)')
+                            print(f'{white}[5]{rescolor} Optimize TCP parameters (admin)')
+                            print(f'{white}[6]{rescolor} Apply privacy tweaks (admin)')
+                            print(f'{white}[7]{rescolor} Revert privacy tweaks (admin)')
+                            print(f'{white}[8]{rescolor} Clear temporary files')
+                            print(f'{white}[9]{rescolor} Debloat Microsoft Edge (admin)')
+                            print(f'{white}[10]{rescolor} Disable Windows Copilot (admin)')
+                            print(f'{white}[0]{rescolor} Back to main menu')
+
+                            choice = input(f'\n{green}[+] {white}Choose option (0-11): {rescolor}').strip()
+
+                            if choice == '0':
+                                break
+                            elif choice == '1':
+                                os.system('cls')
+                                print_result(tw.flush_dns())
+                                input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
+                            elif choice == '2':
+                                os.system('cls')
+                                print_result(tw.reset_winsock())
+                                print(f"{yellow}[!] A reboot is recommended for changes to take effect{rescolor}")
+                                input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
+                            elif choice == '3':
+                                os.system('cls')
+                                print_result(tw.reset_ip_stack())
+                                print(f"{yellow}[!] A reboot is recommended for changes to take effect{rescolor}")
+                                input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
+                            elif choice == '4':
+                                os.system('cls')
+                                primary = input(f'{green}[+] Primary DNS (e.g., 1.1.1.1):{white} ').strip()
+                                secondary = input(f'{green}[+] Secondary DNS (optional):{white} ').strip()
+                                secondary = secondary if secondary else None
+                                results = tw.set_dns_for_all_adapters(primary, secondary)
+                                os.system('cls')
+                                for r in results:
+                                    print_result(r)
+                                input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
+                            elif choice == '5':
+                                os.system('cls')
+                                results = tw.optimize_tcp()
+                                for r in results:
+                                    print_result(r)
+                                print(f"{yellow}[!] A reboot may improve effect of TCP changes{rescolor}")
+                                input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
+                            elif choice == '6':
+                                os.system('cls')
+                                results = tw.apply_privacy_tweaks()
+                                for r in results:
+                                    print_result(r)
+                                input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
+                            elif choice == '7':
+                                os.system('cls')
+                                results = tw.revert_privacy_tweaks()
+                                for r in results:
+                                    print_result(r)
+                                input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
+                            elif choice == '8':
+                                os.system('cls')
+                                print_result(tw.clear_temp_files())
+                                input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
+                            elif choice == '9':
+                                os.system('cls')
+                                results = tw.debloat_edge()
+                                for r in results:
+                                    print_result(r)
+                                print(f"{yellow}[!] Some changes may require a reboot{rescolor}")
+                                input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
+                            elif choice == '10':
+                                os.system('cls')
+                                results = tw.disable_copilot()
+                                for r in results:
+                                    print_result(r)
+                                print(f"{yellow}[!] Sign out/in or reboot may be needed to reflect UI changes{rescolor}")
+                                input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
+                            else:
+                                print(f'{red}[-] Invalid option. Choose 0-11.{rescolor}')
+                                time.sleep(1)
+                                os.system('cls')
+                        except KeyboardInterrupt:
+                            break
+                        except Exception as e:
+                            print(f'\n{red}[-] System Tweaker error: {e}{rescolor}')
+                            input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
+
+                except Exception as e:
+                    print(f'\n{red}[-] Failed to open System Tweaker: {e}{rescolor}')
+                    input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
             # Password Cracking & Security
             elif cmd == '10':
                 try:
@@ -3608,26 +4333,20 @@ def enhanced_main():
                     
             elif cmd == '23':
                 try:
-                    os.system('cls')
-                    enhanced_sysinfo()
+                    proxy_gen()
                     input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
                 except Exception as e:
-                    print(f'\n{red}[-] System info failed: {e}{rescolor}')
+                    print(f'\n{red}[-] Proxy generation failed: {e}{rescolor}')
                     input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
                     
             elif cmd == '24':
                 try:
                     os.system('cls')
-                    appname = input(f'\n{green}[+] Python File Path:{white} ')
-                    appico = input(f'{green}[+] Icon Path (press Enter to skip):{white} ')
-                    if appico.strip() == '':
-                        appico = None
-                    enhanced_py2exe(appname, appico)
+                    prxlistinput = os.path.join(input(f'\n{green}[+] Path To Proxies List To Check:{white} '))
+                    proxy_check(prxlistinput)
                     input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
-                except KeyboardInterrupt:
-                    continue
                 except Exception as e:
-                    print(f'\n{red}[-] Python to EXE conversion failed: {e}{rescolor}')
+                    print(f'\n{red}[-] Proxy checking failed: {e}{rescolor}')
                     input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
                     
             # Advanced & Special Tools
