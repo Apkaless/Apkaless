@@ -244,7 +244,7 @@ class SystemCleaner:
         """Empty the Recycle Bin"""
         try:
             # Use PowerShell to empty recycle bin
-            cmd = 'powershell.exe -Command "Clear-RecycleBin -Force"'
+            cmd = 'powershell.exe -Command "Get-PSDrive -PSProvider FileSystem | ForEach {Clear-RecycleBin -DriveLetter $_.Name -Force -ErrorAction SilentlyContinue}"'
             result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
             
             if result.returncode == 0:
@@ -358,7 +358,9 @@ class SystemCleaner:
         # Empty Recycle Bin
         print("🗑️ Emptying Recycle Bin...")
         results.append(self.clean_recycle_bin())
-        
+
+        print("📋 Cleaning Disk C: ")
+        results.append(self.clean_disk_cleanup())
         return results
 
     def get_system_info(self) -> Dict[str, str]:
@@ -405,7 +407,7 @@ def main():
         print("6. Clean Recent Files")
         print("7. Empty Recycle Bin")
         print("8. Run Disk Cleanup")
-        print("9. Comprehensive Clean")
+        print("9. All in one Clean")
         print("10. System Information")
         print("0. Exit")
         print("=" * 40)

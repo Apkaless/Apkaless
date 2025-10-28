@@ -10,6 +10,7 @@ import time
 import shutil
 from datetime import datetime
 from pathlib import Path
+import urllib
 
 class EnhancedSpoofer:
     def __init__(self):
@@ -55,27 +56,6 @@ class EnhancedSpoofer:
         except Exception as e:
             self.log_action("Backup Cleanup", "ERROR", str(e))
             
-    def validate_backup_file(self, backup_file):
-        """Validate that a backup file is a valid registry file"""
-        try:
-            if not os.path.exists(backup_file):
-                return False
-                
-            # Check file size (should be > 0 bytes)
-            if os.path.getsize(backup_file) == 0:
-                return False
-                
-            # Check if file starts with Windows Registry Editor header
-            with open(backup_file, 'r', encoding='utf-8', errors='ignore') as f:
-                first_line = f.readline().strip()
-                if not first_line.startswith('Windows Registry Editor'):
-                    return False
-                    
-            return True
-            
-        except Exception as e:
-            self.log_action("Backup Validation", "ERROR", f"Validation failed for {backup_file}: {e}")
-            return False
             
     def create_system_restore(self):
         """Create a system restore point before spoofing"""
@@ -117,13 +97,11 @@ class EnhancedSpoofer:
             result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
             
             if result.returncode == 0:
-                # Verify backup file was created and is valid
-                if os.path.exists(backup_file) and self.validate_backup_file(backup_file):
+                # Verify backup file was created
+                if os.path.exists(backup_file):
                     self.log_action(f"Registry Backup {key_name}", "SUCCESS", backup_file)
-                    
                     # Cleanup old backups
                     self.cleanup_old_backups()
-                    
                     return True
                 else:
                     self.log_action(f"Registry Backup {key_name}", "FAILED", "Backup file validation failed")
@@ -142,7 +120,7 @@ class EnhancedSpoofer:
         except Exception as e:
             self.log_action(f"Registry Backup {key_name}", "ERROR", str(e))
             return False
-            
+    
     def backup_registry_value(self, key_path, value_name):
         """Backup a specific registry value before modification"""
         try:
@@ -166,8 +144,8 @@ class EnhancedSpoofer:
             result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
             
             if result.returncode == 0:
-                # Verify backup file was created and is valid
-                if os.path.exists(backup_file) and self.validate_backup_file(backup_file):
+                # Verify backup file was created
+                if os.path.exists(backup_file):
                     self.log_action(f"Registry Value Backup {value_name}", "SUCCESS", backup_file)
                     
                     # Cleanup old backups
@@ -337,56 +315,214 @@ class EnhancedSpoofer:
             return False
             
     def spoof_disk_serial(self):
-        """Spoof disk serial numbers"""
-        try:
-            # Get disk information
-            cmd = "wmic diskdrive get serialnumber,size,model"
-            result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
-            
-            if result.returncode == 0:
-                lines = result.stdout.strip().split('\n')[1:]  # Skip header
-                spoofed_count = 0
+
+        def download_vdiskrun():
+            try:
+                import zipfile
+                import urllib.request
+                import requests
+                temp_dir = os.path.join(os.environ['TEMP'], 'diskspoofer')
+                if not os.path.exists(temp_dir):
+                    os.makedirs(temp_dir)
+                headers = {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:143.0) Gecko/20100101 Firefox/143.0',
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                    'Accept-Language': 'en-US,en;q=0.5',
+                    'Accept-Encoding': 'gzip, deflate, br, zstd',
+                    'Connection': 'keep-alive',
+                }
+                url = 'https://ams3.digitaloceanspaces.com/vandall-storage/projects/bV6eUS8gzID-/6e7e5976-77e8-4516-a231-25beda3b382b/diskspoofer.zip?x-id=GetObject&response-content-disposition=attachment&X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=DO00P4M8UFDJBP7C7XJ9%2F20251027%2Fams3%2Fs3%2Faws4_request&X-Amz-Date=20251027T114601Z&X-Amz-Expires=300&X-Amz-SignedHeaders=host&X-Amz-Signature=5388d2e2879d1a26d500769587411f7a7d75a9b98c275f90bd0c46f08e2a1fb3'
+                s = requests.Session()
+                res = s.get(url, headers=headers, allow_redirects=True, timeout=30)
+                urllib.request.urlretrieve(res.url, os.path.join(temp_dir, "diskspoofer.zip"))
+                with zipfile.ZipFile(os.path.join(temp_dir, "diskspoofer.zip"), "r") as zip_ref:
+                    zip_ref.extractall(temp_dir)
+                os.remove(os.path.join(temp_dir, "diskspoofer.zip"))
+                return True, temp_dir
+            except Exception as e:
+                self.log_action("Disk Serial Spoofing", "ERROR", str(e))
+                return False, None
+
+        def find_vdiskrun():
+            candidates = [
+                os.path.join(os.environ['TEMP'], "diskspoofer", "vdiskrun.exe"),
+                os.path.join(os.environ['TEMP'], "diskspoofer", "vdiskrun64.exe"),
+            ]
+            for path in candidates:
+                if os.path.isfile(path):
+                    return path
+            return None
+
+
+        def list_drives():
+            drives = []
+            for p in psutil.disk_partitions(all=False):
+                if p.device and len(p.device) >= 2 and p.device[1] == ":":
+                    drives.append(p.device[0].upper())
+            # De-duplicate and sort
+            return sorted(set(drives))
+
+
+        def show_drives(drives):
+            print("-" * 112)
+            print("Below you can see a full list with all your drives:")
+            print(" ".join(f"{d}:" for d in drives))
+            print("-" * 112)
+
+
+        def show_volume_info(drive_letter):
+            try:
+                result = subprocess.run(
+                    f'vol {drive_letter}:',
+                    shell=True,
+                    capture_output=True,
+                    text=True
+                )
+                if result.stdout.strip():
+                    print(result.stdout.strip())
+                if result.stderr.strip():
+                    print(result.stderr.strip())
+            except Exception as e:
+                print(f"Could not get volume info: {e}")
+
+
+        def generate_serial():
+            pool = "0123456789ABCDEF"
+            part1 = "".join(random.choice(pool) for _ in range(4))
+            part2 = "".join(random.choice(pool) for _ in range(4))
+            return f"{part1}-{part2}"
+
+
+        def main():
+            response, vdiskpath = download_vdiskrun()
+            if response and vdiskpath:
+                vdiskrun_path = find_vdiskrun()
+                if not vdiskrun_path:
+                    print("vdiskrun executable not found. Place vdiskrun.exe next to this script or in C:\\")
+                    return
+
+                drives = list_drives()
+                if not drives:
+                    print("No drives detected.")
+                    return
+
+                show_drives(drives)
+
+                drive = input("Which drive ID do you want to change? (Just type the letter of the drive): ").strip().upper()
+                if not drive or len(drive) != 1 or drive not in drives:
+                    print("Invalid drive letter selected.")
+                    return
+
+                print("\nCurrent volume info:")
+                show_volume_info(drive)
+
+                new_serial = generate_serial()
+                print(f"Drive {drive} id will be changed to {new_serial}")
+                input("\nPress Enter to continue...")
+
+                cmd = f'"{vdiskrun_path}" {drive}: {new_serial} /accepteula'
+                print(f"Running: {cmd}")
+                try:
+                    result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+                    if result.returncode == 0:
+                        print(f"Drive {drive} id was successfully changed to {new_serial}! Go Restart Your Computer")
+                    else:
+                        print("Failed to change disk ID.")
+                        if result.stdout.strip():
+                            print(result.stdout.strip())
+                        if result.stderr.strip():
+                            print(result.stderr.strip())
+                except Exception as e:
+                    print(f"Error running vdiskrun: {e}")
                 
-                for line in lines:
-                    if line.strip():
-                        parts = line.strip().split()
-                        if len(parts) >= 2:
-                            try:
-                                # Generate new serial number
-                                new_serial = ''.join(random.choice(string.ascii_uppercase + string.digits) for _ in range(8))
-                                
-                                # Use vdiskrun to change serial (if available)
-                                disk_letter = "C:"  # Default to C drive
-                                vdisk_cmd = f'vdiskrun.exe {disk_letter} {new_serial}'
-                                
-                                # Try to run vdiskrun if available
-                                try:
-                                    vdisk_result = subprocess.run(vdisk_cmd, shell=True, capture_output=True, text=True)
-                                    if vdisk_result.returncode == 0:
-                                        spoofed_count += 1
-                                        self.log_action("Disk Serial Spoof", "SUCCESS", f"New Serial: {new_serial}")
-                                    else:
-                                        self.log_action("Disk Serial Spoof", "FAILED", "vdiskrun failed")
-                                except FileNotFoundError:
-                                    self.log_action("Disk Serial Spoof", "SKIPPED", "vdiskrun not available")
-                                    
-                            except Exception as e:
-                                self.log_action("Disk Serial Spoof", "ERROR", str(e))
-                                
-                if spoofed_count > 0:
-                    self.log_action("Disk Serial Spoofing", "SUCCESS", f"Spoofed {spoofed_count} disks")
-                    return True
-                else:
-                    self.log_action("Disk Serial Spoofing", "FAILED", "No disks were spoofed")
-                    return False
-            else:
-                self.log_action("Disk Serial Spoofing", "ERROR", "Failed to get disk information")
-                return False
+                shutil.rmtree(vdiskpath)
+                input("Press Enter to exit...")
+        main()
+
+    def spoofhwid(self):
+        def download_hwid():
+            try:
+                import zipfile
+                import urllib.request
+                import requests
+                temp_dir = os.path.join(os.environ['TEMP'], 'hwidspoofer')
+                if not os.path.exists(temp_dir):
+                    os.makedirs(temp_dir)
+                headers = {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:143.0) Gecko/20100101 Firefox/143.0',
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                    'Accept-Language': 'en-US,en;q=0.5',
+                    'Accept-Encoding': 'gzip, deflate, br, zstd',
+                    'Connection': 'keep-alive',
+                }
+                url = 'https://ams3.digitaloceanspaces.com/vandall-storage/projects/bV6eUS8gzID-/6aa5b2eb-dcf9-406f-945f-b13c8e7f35a8/hwidspoofer.zip?x-id=GetObject&response-content-disposition=attachment&X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=DO00P4M8UFDJBP7C7XJ9%2F20251027%2Fams3%2Fs3%2Faws4_request&X-Amz-Date=20251027T114840Z&X-Amz-Expires=300&X-Amz-SignedHeaders=host&X-Amz-Signature=5358301920c649532e6fc5aa1978c8975781eace594c128d3b144926353dc9d2'
+                s = requests.Session()
+                res = s.get(url, headers=headers, allow_redirects=True, timeout=30)
+                urllib.request.urlretrieve(res.url, os.path.join(temp_dir, "hwidspoofer.zip"))
+                with zipfile.ZipFile(os.path.join(temp_dir, "hwidspoofer.zip"), "r") as zip_ref:
+                    zip_ref.extractall(temp_dir)
+                os.remove(os.path.join(temp_dir, "hwidspoofer.zip"))
+                return True, temp_dir
+            except Exception as e:
+                self.log_action("HWID Spoofing", "ERROR", str(e))
+                return False, None
+
+        def find_hwid():
+            candidates = [
+                os.path.join(os.environ['TEMP'], "hwidspoofer", "advchangeHWIDS.exe"),
+            ]
+            for path in candidates:
+                if os.path.isfile(path):
+                    return path
+            return None
+
+        def generate_serial(length: int):
+            pool = "0123456789ABCDEF"
+            part1 = "".join(random.choice(pool) for _ in range(length))
+            return f"{part1}"
+
+        def main():
+            response, hwidpath = download_hwid()
+            if response and hwidpath:
+                hwid_path = find_hwid()
+                if not hwid_path:
+                    print("HWID executable not found.")
+                    return
                 
-        except Exception as e:
-            self.log_action("Disk Serial Spoofing", "ERROR", str(e))
-            return False
-            
+                commands_to_run = []
+                hwids_to_print = []
+                hwids = {'BaseBoard SerialNumber': (generate_serial(8), '/BS'), 'Processor SerialNumber': (generate_serial(16), '/PSN'), 'System SerialNumber': (generate_serial(8), 'SS'), 'Chassis SerialNumber': (generate_serial(6), '/CS'), 'System UUID': ('', '/SU')}
+                print("\n")
+                for key, value in hwids.items():
+                    print(f"{key} will be changed to {value[0]}" if key != 'System UUID' else f"{key} will be changed Automatically")
+                    cmd = f'"{hwid_path}" {value[1]} {value[0]}' if key != 'System UUID' else f'"{hwid_path}" {value[1]}'
+                    commands_to_run.append(cmd)
+
+                for key in hwids.keys():
+                    hwids_to_print.append(key)
+                
+                input("\nPress Enter to continue...")
+                # print(f"Running: {cmd}")
+                try:
+                    hwid_pos = 0
+                    for cmd in commands_to_run:
+                        result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+                        if result.returncode == 0:
+                            print(f"Hardware {hwids_to_print[hwid_pos]} was successfully changed to {hwids[hwids_to_print[hwid_pos]][0]}! Go Restart Your Computer")
+                        else:
+                            print("Failed to spoof HWIDs.")
+                            if result.stdout.strip():
+                                print(result.stdout.strip())
+                            if result.stderr.strip():
+                                print(result.stderr.strip())
+                        hwid_pos += 1
+                except Exception as e:
+                    print(f"Error running Spoofer: {e}")
+                shutil.rmtree(hwidpath)
+                input("Press Enter to exit...")
+        main()
+
+
     def spoof_display_id(self):
         """Spoof display hardware ID"""
         try:
@@ -440,8 +576,8 @@ class EnhancedSpoofer:
     def spoof_gpu_id(self):
         """Spoof GPU hardware ID"""
         try:
-            # Get GPU information
-            cmd = "wmic path Win32_VideoController get PNPDeviceID"
+            # Get GPU information using PowerShell
+            cmd = 'powershell "Get-WmiObject -Class Win32_VideoController | Select-Object PNPDeviceID | Format-Table -AutoSize"'
             result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
             
             if result.returncode == 0:
@@ -494,53 +630,6 @@ class EnhancedSpoofer:
                 
         except Exception as e:
             self.log_action("GPU ID Spoofing", "ERROR", str(e))
-            return False
-            
-    def spoof_bios_info(self):
-        """Spoof BIOS information"""
-        try:
-            # Generate new BIOS information
-            new_bios_version = f"{random.randint(1, 9)}.{random.randint(10, 99)}.{random.randint(100, 999)}"
-            new_bios_date = f"{random.randint(1, 12):02d}/{random.randint(1, 28):02d}/{random.randint(2020, 2024)}"
-            
-            # Registry keys for BIOS information
-            bios_keys = {
-                r"SYSTEM\CurrentControlSet\Control\BIOS": {
-                    "BIOSVersion": new_bios_version,
-                    "BIOSReleaseDate": new_bios_date
-                }
-            }
-            
-            spoofed_count = 0
-            
-            for key_path, values in bios_keys.items():
-                try:
-                    # Backup current values
-                    for value_name in values.keys():
-                        self.backup_registry_key(key_path, value_name)
-                    
-                    # Modify registry
-                    with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, key_path, 0, winreg.KEY_WRITE) as key:
-                        for value_name, new_value in values.items():
-                            try:
-                                winreg.SetValueEx(key, value_name, 0, winreg.REG_SZ, new_value)
-                                spoofed_count += 1
-                                self.log_action(f"BIOS {value_name} Spoof", "SUCCESS", f"New value: {new_value}")
-                            except Exception as e:
-                                self.log_action(f"BIOS {value_name} Spoof", "ERROR", str(e))
-                                
-                except Exception as e:
-                    self.log_action(f"BIOS Key {key_path}", "ERROR", str(e))
-                    
-            if spoofed_count > 0:
-                self.log_action("BIOS Info Spoofing", "SUCCESS", f"Spoofed {spoofed_count} values")
-                return True
-            else:
-                self.log_action("BIOS Info Spoofing", "FAILED", "No BIOS values were spoofed")
-                return False
-                
-        except Exception as e:
-            self.log_action("BIOS Info Spoofing", "ERROR", str(e))
             return False
             
     def clear_temp_files(self):
@@ -633,8 +722,8 @@ class EnhancedSpoofer:
             ("MAC Address", self.spoof_mac_address),
             ("Display ID", self.spoof_display_id),
             ("GPU ID", self.spoof_gpu_id),
-            ("BIOS Info", self.spoof_bios_info),
-            ("Disk Serial", self.spoof_disk_serial)
+            ("Disk Serial", self.spoof_disk_serial),
+            ("HW Serial", self.spoofhwid)
         ]
         
         successful_operations = 0
@@ -710,12 +799,6 @@ class EnhancedSpoofer:
         try:
             if not os.path.exists(backup_file):
                 print(f"❌ Backup file not found: {backup_file}")
-                return False
-                
-            # Validate backup file before restoration
-            if not self.validate_backup_file(backup_file):
-                print(f"❌ Invalid backup file: {backup_file}")
-                print("⚠️  File may be corrupted or not a valid registry file")
                 return False
                 
             # Create a backup of current state before restoration
@@ -813,15 +896,7 @@ class EnhancedSpoofer:
                 file_size = os.path.getsize(file_path)
                 file_time = datetime.fromtimestamp(os.path.getmtime(file_path))
                 
-                # Validate backup file
-                is_valid = self.validate_backup_file(file_path)
-                status = "✅ Valid" if is_valid else "❌ Invalid"
-                
-                if is_valid:
-                    valid_backups += 1
-                    total_size += file_size
-                
-                print(f"{i:<3} {backup_file:<35} {file_size:>8,} B {file_time.strftime('%Y-%m-%d %H:%M:%S'):<20} {status:<10}")
+                print(f"{i:<3} {backup_file:<35} {file_size:>8,} B {file_time.strftime('%Y-%m-%d %H:%M:%S'):<20}")
                 
             print("=" * 80)
             print(f"📊 Summary: {valid_backups}/{len(backup_files)} valid backups, Total size: {total_size:,} bytes")
@@ -841,11 +916,9 @@ class EnhancedSpoofer:
             while True:
                 print("\n🔧 Backup Management Options:")
                 print("1. List all backups")
-                print("2. Validate all backups")
-                print("3. Clean up invalid backups")
-                print("4. Delete specific backup")
-                print("5. Export backup to safe location")
-                print("6. Back to main menu")
+                print("2. Delete specific backup")
+                print("3. Export backup to safe location")
+                print("4. Back to main menu")
                 
                 choice = input("\nEnter your choice (1-6): ").strip()
                 
@@ -853,18 +926,12 @@ class EnhancedSpoofer:
                     self.list_backups()
                     
                 elif choice == '2':
-                    self.validate_all_backups()
-                    
-                elif choice == '3':
-                    self.cleanup_invalid_backups()
-                    
-                elif choice == '4':
                     self.delete_specific_backup()
                     
-                elif choice == '5':
+                elif choice == '3':
                     self.export_backup()
                     
-                elif choice == '6':
+                elif choice == '4':
                     break
                     
                 else:
@@ -874,70 +941,7 @@ class EnhancedSpoofer:
             print(f"❌ Backup management error: {e}")
             self.log_action("Backup Management", "ERROR", str(e))
             
-    def validate_all_backups(self):
-        """Validate all backup files and report status"""
-        try:
-            if not os.path.exists(self.backup_dir):
-                print("📁 Backup directory not found")
-                return
-                
-            backup_files = [f for f in os.listdir(self.backup_dir) if f.endswith('.reg')]
-            
-            if not backup_files:
-                print("📁 No backup files to validate")
-                return
-                
-            print(f"🔍 Validating {len(backup_files)} backup files...")
-            
-            valid_count = 0
-            invalid_count = 0
-            
-            for backup_file in backup_files:
-                file_path = os.path.join(self.backup_dir, backup_file)
-                if self.validate_backup_file(file_path):
-                    valid_count += 1
-                    print(f"✅ {backup_file}")
-                else:
-                    invalid_count += 1
-                    print(f"❌ {backup_file}")
-                    
-            print(f"\n📊 Validation complete: {valid_count} valid, {invalid_count} invalid")
-            
-        except Exception as e:
-            print(f"❌ Validation error: {e}")
-            self.log_action("Backup Validation", "ERROR", str(e))
-            
-    def cleanup_invalid_backups(self):
-        """Remove invalid backup files"""
-        try:
-            if not os.path.exists(self.backup_dir):
-                print("📁 Backup directory not found")
-                return
-                
-            backup_files = [f for f in os.listdir(self.backup_dir) if f.endswith('.reg')]
-            
-            if not backup_files:
-                print("📁 No backup files to clean")
-                return
-                
-            print("🧹 Cleaning up invalid backup files...")
-            
-            removed_count = 0
-            for backup_file in backup_files:
-                file_path = os.path.join(self.backup_dir, backup_file)
-                if not self.validate_backup_file(file_path):
-                    try:
-                        os.remove(file_path)
-                        print(f"🗑️  Removed invalid backup: {backup_file}")
-                        removed_count += 1
-                    except Exception as e:
-                        print(f"❌ Failed to remove {backup_file}: {e}")
-                        
-            print(f"📊 Cleanup complete: {removed_count} invalid backups removed")
-            
-        except Exception as e:
-            print(f"❌ Cleanup error: {e}")
-            self.log_action("Backup Cleanup", "ERROR", str(e))
+
             
     def delete_specific_backup(self):
         """Delete a specific backup file"""
@@ -1021,12 +1025,14 @@ def main():
     
     print("🔐 System Spoofer v1.0 By Apkaless")
     print("=" * 50)
-    print("1. Comprehensive Spoof")
+    print("1. All in one Spoof")
     print("2. Quick Spoof")
-    print("3. List Backups")
-    print("4. Restore from Backup")
-    print("5. Backup Management")
-    print("6. Exit")
+    print("3. DISK ID Spoof")
+    print("4. HWIDs Spoof")
+    print("5. List Backups")
+    print("6. Restore from Backup")
+    print("7. Backup Management")
+    print("8. Exit")
     
     while True:
         try:
@@ -1037,15 +1043,19 @@ def main():
             elif choice == '2':
                 spoofer.quick_spoof()
             elif choice == '3':
-                spoofer.list_backups()
+                spoofer.spoof_disk_serial()
             elif choice == '4':
+                spoofer.spoofhwid()
+            elif choice == '5':
+                spoofer.list_backups()
+            elif choice == '6':
                 backup_file = input("Enter backup file name: ").strip()
                 if backup_file:
                     backup_path = os.path.join(spoofer.backup_dir, backup_file)
                     spoofer.restore_from_backup(backup_path)
-            elif choice == '5':
+            elif choice == '7':
                 spoofer.manage_backups()
-            elif choice == '6':
+            elif choice == '8':
                 print("👋 Goodbye!")
                 break
             else:

