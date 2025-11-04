@@ -331,7 +331,7 @@ class EnhancedSpoofer:
                     'Accept-Encoding': 'gzip, deflate, br, zstd',
                     'Connection': 'keep-alive',
                 }
-                url = 'https://ams3.digitaloceanspaces.com/vandall-storage/projects/bV6eUS8gzID-/6e7e5976-77e8-4516-a231-25beda3b382b/diskspoofer.zip?x-id=GetObject&response-content-disposition=attachment&X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=DO00P4M8UFDJBP7C7XJ9%2F20251027%2Fams3%2Fs3%2Faws4_request&X-Amz-Date=20251027T114601Z&X-Amz-Expires=300&X-Amz-SignedHeaders=host&X-Amz-Signature=5388d2e2879d1a26d500769587411f7a7d75a9b98c275f90bd0c46f08e2a1fb3'
+                url = 'https://4upload.net/download/DfTvo7iRS5gwjpy/Zl76mZ8pzanYj/diskspoofer.zip'
                 s = requests.Session()
                 res = s.get(url, headers=headers, allow_redirects=True, timeout=30)
                 urllib.request.urlretrieve(res.url, os.path.join(temp_dir, "diskspoofer.zip"))
@@ -453,9 +453,9 @@ class EnhancedSpoofer:
                     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
                     'Accept-Language': 'en-US,en;q=0.5',
                     'Accept-Encoding': 'gzip, deflate, br, zstd',
-                    'Connection': 'keep-alive',
+                    'Connection': 'keep-alive'
                 }
-                url = 'https://ams3.digitaloceanspaces.com/vandall-storage/projects/bV6eUS8gzID-/6aa5b2eb-dcf9-406f-945f-b13c8e7f35a8/hwidspoofer.zip?x-id=GetObject&response-content-disposition=attachment&X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=DO00P4M8UFDJBP7C7XJ9%2F20251027%2Fams3%2Fs3%2Faws4_request&X-Amz-Date=20251027T114840Z&X-Amz-Expires=300&X-Amz-SignedHeaders=host&X-Amz-Signature=5358301920c649532e6fc5aa1978c8975781eace594c128d3b144926353dc9d2'
+                url = 'https://4upload.net/download/eeDUsT8bFtgCSfi/Qrk9zKkXz0lYD/hwidspoofer.zip'
                 s = requests.Session()
                 res = s.get(url, headers=headers, allow_redirects=True, timeout=30)
                 urllib.request.urlretrieve(res.url, os.path.join(temp_dir, "hwidspoofer.zip"))
