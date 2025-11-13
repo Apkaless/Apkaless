@@ -3,6 +3,7 @@ import sys
 import random
 import string
 import subprocess
+from urllib import request
 import psutil
 import winreg
 import hashlib
@@ -11,6 +12,8 @@ import shutil
 from datetime import datetime
 from pathlib import Path
 import urllib
+import bs4
+import requests
 
 class EnhancedSpoofer:
     def __init__(self):
@@ -313,7 +316,13 @@ class EnhancedSpoofer:
         except Exception as e:
             self.log_action("MAC Address Spoofing", "ERROR", str(e))
             return False
-            
+    
+    def getDownloadURL(self, base_url):
+        content = requests.get(base_url).text
+        html_content = bs4.BeautifulSoup(content, 'lxml')
+        elem = html_content.find('a', attrs=('class', 'download-link'))
+        return elem.attrs['href']
+    
     def spoof_disk_serial(self):
 
         def download_vdiskrun():
@@ -331,7 +340,7 @@ class EnhancedSpoofer:
                     'Accept-Encoding': 'gzip, deflate, br, zstd',
                     'Connection': 'keep-alive',
                 }
-                url = 'https://4upload.net/download/DfTvo7iRS5gwjpy/Zl76mZ8pzanYj/diskspoofer.zip'
+                url = self.getDownloadURL('https://4upload.net/DfTvo7iRS5gwjpy/file')
                 s = requests.Session()
                 res = s.get(url, headers=headers, allow_redirects=True, timeout=30)
                 urllib.request.urlretrieve(res.url, os.path.join(temp_dir, "diskspoofer.zip"))
@@ -455,7 +464,7 @@ class EnhancedSpoofer:
                     'Accept-Encoding': 'gzip, deflate, br, zstd',
                     'Connection': 'keep-alive'
                 }
-                url = 'https://4upload.net/download/eeDUsT8bFtgCSfi/Qrk9zKkXz0lYD/hwidspoofer.zip'
+                url = self.getDownloadURL('https://4upload.net/eeDUsT8bFtgCSfi/file')
                 s = requests.Session()
                 res = s.get(url, headers=headers, allow_redirects=True, timeout=30)
                 urllib.request.urlretrieve(res.url, os.path.join(temp_dir, "hwidspoofer.zip"))
