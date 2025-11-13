@@ -374,7 +374,7 @@ class EnhancedSpoofer:
 
         def show_drives(drives):
             print("-" * 112)
-            print("Below you can see a full list with all your drives:".capitalize())
+            print("Below you can see a full list with all your drives:")
             print(" ".join(f"{d}:" for d in drives))
             print("-" * 112)
 
@@ -392,7 +392,7 @@ class EnhancedSpoofer:
                 if result.stderr.strip():
                     print(result.stderr.strip())
             except Exception as e:
-                print(f"Could not get volume info: {e}".capitalize())
+                print(f"Could not get volume info: {e}")
 
 
         def generate_serial():
@@ -416,7 +416,7 @@ class EnhancedSpoofer:
 
                 show_drives(drives)
                 drives_to_be_changed = []
-                drive = input("Which drive ID do you want to change? (Just type the letter of the drive or letters spearated by comma ',' ): ".capitalize()).strip().upper()
+                drive = input("Which drive ID do you want to change? (Just type the letter of the drive or letters spearated by comma ',' ): ").strip().upper()
                 if ',' in drive:
                     drives_to_be_changed.extend(drive.strip().split(','))
                 else:
@@ -424,14 +424,14 @@ class EnhancedSpoofer:
                     
                 for drive in drives_to_be_changed:
                     if not drive or len(drive) != 1 or drive not in drives:
-                        print("Invalid drive letter selected.".capitalize())
+                        print("Invalid drive letter selected.")
                         return
                     
-                    print("\nCurrent volume info:".capitalize())
+                    print("\nCurrent volume info:")
                     show_volume_info(drive)
 
                     new_serial = generate_serial()
-                    print(f"Drive {drive} SerialNumber will be changed to {new_serial}".capitalize())
+                    print(f"Drive {drive} SerialNumber will be changed to {new_serial}")
                     input("\nPress Enter to continue...")
 
                     cmd = f'"{vdiskrun_path}" {drive}: {new_serial} /accepteula'
@@ -439,7 +439,7 @@ class EnhancedSpoofer:
                     try:
                         result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
                         if result.returncode == 0:
-                            print(f"Drive {drive} SerialNumber was successfully changed to {new_serial}!".capitalize())
+                            print(f"Drive {drive} SerialNumber was successfully changed to {new_serial}!")
                         else:
                             print("Failed to change disk ID.")
                             if result.stdout.strip():
@@ -508,7 +508,7 @@ class EnhancedSpoofer:
                 hwids = {'BaseBoard SerialNumber': (generate_serial(8), '/BS'), 'Processor SerialNumber': (generate_serial(16), '/PSN'), 'System SerialNumber': (generate_serial(8), 'SS'), 'Chassis SerialNumber': (generate_serial(6), '/CS'), 'System UUID': ('', '/SU')}
                 print("\n")
                 for key, value in hwids.items():
-                    print(f"{key} will be changed to {value[0]}".capitalize() if key != 'System UUID' else f"{key} will be changed Automatically".capitalize())
+                    print(f"{key} will be changed to {value[0]}" if key != 'System UUID' else f"{key} will be changed Automatically")
                     cmd = f'"{hwid_path}" {value[1]} {value[0]}' if key != 'System UUID' else f'"{hwid_path}" {value[1]}'
                     commands_to_run.append(cmd)
 
@@ -522,7 +522,7 @@ class EnhancedSpoofer:
                     for cmd in commands_to_run:
                         result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
                         if result.returncode == 0:
-                            print(f"Hardware {hwids_to_print[hwid_pos]} was successfully changed to {hwids[hwids_to_print[hwid_pos]][0]}! Go Restart Your Computer".capitalize())
+                            print(f"Hardware {hwids_to_print[hwid_pos]} was successfully changed to {hwids[hwids_to_print[hwid_pos]][0]}! Go Restart Your Computer")
                         else:
                             print("Failed to spoof HWIDs.")
                             if result.stdout.strip():
