@@ -407,7 +407,6 @@ class EnhancedSpoofer:
             if response and vdiskpath:
                 vdiskrun_path = find_vdiskrun()
                 if not vdiskrun_path:
-                    print("vdiskrun executable not found. Place vdiskrun.exe next to this script or in C:\\")
                     return
 
                 drives = list_drives()
@@ -416,34 +415,40 @@ class EnhancedSpoofer:
                     return
 
                 show_drives(drives)
+                drives_to_be_changed = []
+                drive = input("Which drive ID do you want to change? (Just type the letter of the drive or letters spearated by comma ',' ): ").strip().upper()
+                if ',' in drive:
+                    drives_to_be_changed.extend(drive.strip().split(','))
+                else:
+                    drives_to_be_changed.append(drive)
+                    
+                for drive in drives_to_be_changed:
+                    if not drive or len(drive) != 1 or drive not in drives:
+                        print("Invalid drive letter selected.")
+                        return
+                    
+                    print("\nCurrent volume info:")
+                    show_volume_info(drive)
 
-                drive = input("Which drive ID do you want to change? (Just type the letter of the drive): ").strip().upper()
-                if not drive or len(drive) != 1 or drive not in drives:
-                    print("Invalid drive letter selected.")
-                    return
+                    new_serial = generate_serial()
+                    print(f"Drive {drive} id will be changed to {new_serial}")
+                    input("\nPress Enter to continue...")
 
-                print("\nCurrent volume info:")
-                show_volume_info(drive)
-
-                new_serial = generate_serial()
-                print(f"Drive {drive} id will be changed to {new_serial}")
-                input("\nPress Enter to continue...")
-
-                cmd = f'"{vdiskrun_path}" {drive}: {new_serial} /accepteula'
-                print(f"Running: {cmd}")
-                try:
-                    result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
-                    if result.returncode == 0:
-                        print(f"Drive {drive} id was successfully changed to {new_serial}! Go Restart Your Computer")
-                    else:
-                        print("Failed to change disk ID.")
-                        if result.stdout.strip():
-                            print(result.stdout.strip())
-                        if result.stderr.strip():
-                            print(result.stderr.strip())
-                except Exception as e:
-                    print(f"Error running vdiskrun: {e}")
-                
+                    cmd = f'"{vdiskrun_path}" {drive}: {new_serial} /accepteula'
+                    # print(f"Running: {cmd}")
+                    try:
+                        result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+                        if result.returncode == 0:
+                            print(f"Drive {drive} id was successfully changed to {new_serial}!")
+                        else:
+                            print("Failed to change disk ID.")
+                            if result.stdout.strip():
+                                print(result.stdout.strip())
+                            if result.stderr.strip():
+                                print(result.stderr.strip())
+                    except Exception as e:
+                        print(f"Error running vdiskrun: {e}")
+                print('\nGo Restart Your Computer\n')
                 shutil.rmtree(vdiskpath)
                 input("Press Enter to exit...")
         main()
