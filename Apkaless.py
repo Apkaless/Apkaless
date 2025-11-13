@@ -4608,10 +4608,12 @@ def enhanced_main():
                                 except Exception as e:
                                     print(f'{lcyan}[-] Spoofer initialization failed: {e}{rescolor}')
                                     input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
+                            else:
+                                print(f'\n{yellow}[!] {white}Please Turn OFF These: {yellow}\n\n\t\t*> {white}Memory Integrity\n\t\t{yellow}*> {white}Local Security Authority Protection\n\t\t{yellow}*> {white}Microsoft Vulnerable Driver Blocklist\n\n{white}Settings {cyan}>{rescolor} Privacy & Security {cyan}>{rescolor} Windows Security {cyan}>{rescolor} Device Security {cyan}>{rescolor} Core Isolation{rescolor}\n\nThen Restart Your Comuter')
+                                input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
+                        else:     
                             print(f'\n{yellow}[!] {white}Please Turn OFF These: {yellow}\n\n\t\t*> {white}Memory Integrity\n\t\t{yellow}*> {white}Local Security Authority Protection\n\t\t{yellow}*> {white}Microsoft Vulnerable Driver Blocklist\n\n{white}Settings {cyan}>{rescolor} Privacy & Security {cyan}>{rescolor} Windows Security {cyan}>{rescolor} Device Security {cyan}>{rescolor} Core Isolation{rescolor}\n\nThen Restart Your Comuter')
                             input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
-                        print(f'\n{yellow}[!] {white}Please Turn OFF These: {yellow}\n\n\t\t*> {white}Memory Integrity\n\t\t{yellow}*> {white}Local Security Authority Protection\n\t\t{yellow}*> {white}Microsoft Vulnerable Driver Blocklist\n\n{white}Settings {cyan}>{rescolor} Privacy & Security {cyan}>{rescolor} Windows Security {cyan}>{rescolor} Device Security {cyan}>{rescolor} Core Isolation{rescolor}\n\nThen Restart Your Comuter')
-                        input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
                     else:
                         input(f"\n{yellow}[!] {white}Run This Tool As Admin And Try Again !{rescolor}")
                         
