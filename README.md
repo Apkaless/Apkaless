@@ -48,29 +48,34 @@ python Apkaless.py
 ## 📋 Features
 
 ### 🔐 Security Tools
-- **Hash Cracker**: Support for MD5, SHA1, SHA256, SHA384, SHA512
-- **ZIP/7z Cracker**: Password recovery for encrypted archives
-- **WiFi Cracker**: Network security testing
-- **HWID Spoofer**: Hardware ID modification tools
+- **🔨Hash Cracker**: Support for MD5, SHA1, SHA256, SHA384, SHA512
+- **📦ZIP/7z Cracker**: Password recovery for encrypted archives
+- **📡WiFi Cracker**: Network security testing
+- **📝Wordlist Generator**: Generate a List of Passwords Very Fast
 
 ### 🌐 Network Tools
-- **Proxy Generator**: Automatic proxy scraping and validation
-- **IP Lookup**: Comprehensive IP address information
-- **Network Optimizer**: Performance optimization tools
-- **Webhook Tools**: Discord webhook management
+- **🌊Proxy Generator**: Automatic proxy scraping and validation
+- **✅Proxy Checker**: Check whether the proxies are working or not
+- **📍IP Lookup**: Comprehensive IP address information
+- **⚡Network Optimizer**: Apply optimizations for better network performance
+- **☠️ Discord Nuker**: Nuke or Destroy Any Discord Account Just By Using The Token
+- **🕷️Webhook Tool**: Discord webhook management
+- **🕷️Discord Token Grabber**: Script To Pull Discord Tokens From User's Device And Send A Download Link To A Specific Telegram Channel
+- **📧HotMail Checker**: Check whether the microsoft account creds are correct or not from a combo file (email:password)
+- **🎭URL Masking**: Phishing tool
 
 ### 💻 System Tools
-- **System Information**: Detailed hardware specifications
-- **Real-time Monitoring**: Live system resource tracking
-- **Windows Activation**: System activation tools
-- **Temp File Cleaner**: System cleanup utilities
+- **🎭System Spoofer**: Spoof any hwid on the system
+- **🔍Get HWID**: Get detailed information about system components
+- **⚙️System Tweaker**: Simple Tweaks That Will Be Applied to the system
+- **📊System Information**: Detailed hardware specifications
+- **🔓Windows Activation**: System activation tools
+- **🗑️Temp File Cleaner**: System cleanup utilities
 
 ### 🎯 Specialized Tools
-- **Phone Number Tracker**: Location tracking and mapping
-- **Discord User Checker**: Username availability checker
-- **URL Masking**: Phishing simulation tools
-- **Malware Generator**: Educational security tools
-
+- **🦠Malware Generator**: Educational security tools
+- **🦠Encrypt Python File**: Encrypt python source code
+  
 ## ⚙️ Configuration
 
 The application now includes a comprehensive configuration system:
@@ -119,12 +124,6 @@ ipinfo_key = your_key_here
 - Only use on systems you own or have permission to test
 - Respect privacy and legal boundaries
 
-### 🔒 Security Features
-- Input validation prevents injection attacks
-- Path traversal protection
-- Rate limiting for network operations
-- Comprehensive error logging
-
 ## 📝 Usage Examples
 
 ### Basic Usage
@@ -134,13 +133,12 @@ ipinfo_key = your_key_here
 4. View results and logs
 
 ### Advanced Configuration
-1. Access Settings menu (option 26)
+1. Access Settings menu (option 27)
 2. Modify configuration values
 3. View and manage logs
-4. Customize application behavior
 
 ### System Monitoring
-1. Select System Monitor (option 27)
+1. Select System Monitor (option 28)
 2. View real-time system metrics
 3. Monitor CPU, RAM, and disk usage
 4. Press Ctrl+C to stop monitoring
@@ -159,7 +157,7 @@ ipinfo_key = your_key_here
 - Enable debug logging for troubleshooting
 
 ### Support
-- Check the About & Help section (option 28)
+- Check the About & Help section (option 29)
 - Review error logs for specific issues
 - Ensure all dependencies are properly installed
 
@@ -204,12 +202,7 @@ This project is provided "as is" without warranty. Users are responsible for the
 - **Instagram**: [@apkaless](https://instagram.com/apkaless)
 - **Region**: IRAQ
 
-## 🙏 Acknowledgments
-
-- Original Apkaless development team
-- Open source community contributors
-- Security researchers and educators
-
 ---
 
 **Remember**: Use this tool responsibly and only for educational purposes on systems you own or have permission to test.
+
