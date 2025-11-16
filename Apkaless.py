@@ -4509,8 +4509,7 @@ def enhanced_main():
             print(f'{darkred}╚══════════════════════════════════════════════════════════════════════════════════════════════════════╝{rescolor}')
 
             cmd = input(f'\n{lcyan}[💀]{white} SELECT YOUR BRUTAL OPTION: ').strip()
-            
-            # Exit command
+
             if cmd == '00':
                 os.system('cls')
                 print(f'\n{cyan}╔══════════════════════════════════════════════════════════════════════════════════════════════════════╗')
@@ -4521,7 +4520,6 @@ def enhanced_main():
                 time.sleep(3)
                 break
             
-            # System Tools & Utilities
             if cmd == '1':
                 try:
                     os.system('cls')
@@ -4724,6 +4722,7 @@ def enhanced_main():
                                     os.system('cls')
                             else:
                                 input(f"\n{yellow}[!] {white}Run This Tool As Admin And Try Again !{rescolor}\n")
+                                break
                         except KeyboardInterrupt:
                             break
                         except Exception as e:
@@ -4976,7 +4975,6 @@ def enhanced_main():
                     print(f'\n{lcyan}[-] Failed to launch IDM Trial Reset: {e}{rescolor}')
                 input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
 
-            # Password Cracking & Security
             elif cmd == '10':
                 try:
                     os.system('cls')
@@ -5066,7 +5064,6 @@ def enhanced_main():
                     print(f'\n{lcyan}[-] WiFi cracking failed: {e}{rescolor}')
                     input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
                     
-            # Network & Web Tools
             elif cmd == '16':
                 from pytools.d_t import code_writer
                 os.system('cls')
@@ -5153,7 +5150,6 @@ def enhanced_main():
                     print(f'\n{lcyan}[-] Proxy checking failed: {e}{rescolor}')
                     input(f'\n{blue}[!] {green}Press Enter to continue...{rescolor}')
                     
-            # Advanced & Special Tools
             elif cmd == '25':
                 try:
                     os.system('cls')
@@ -5245,7 +5241,6 @@ if __name__ == '__main__':
     try:
         os.system('cls')
         
-        # Initialize color variables
         red = Fore.RED
         darkred = Fore.LIGHTBLACK_EX
         white = Fore.WHITE
@@ -5258,12 +5253,10 @@ if __name__ == '__main__':
         lmagenta = Fore.LIGHTMAGENTA_EX
         rescolor = Fore.RESET
         
-        # Application version and configuration
         cversion = 3
         tool_parent_dir = os.getcwd()
         username = os.getlogin()
         
-        # Setup paths
         global path_to_go, path_to_Apkaless
         path_to_Apkaless = f'C:/Users/{username}/AppData/Local/Apkaless'
         path_to_go = f'C:/Users/{username}/AppData/Local/Apkaless/go'
