@@ -1,7 +1,4 @@
 #!/usr/bin/env python3
-"""
-Simple Hotmail/Outlook Account Checker
-"""
 
 import os
 import requests
@@ -11,7 +8,6 @@ import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from colorama import Fore, init
 
-# ANSI colors for minimal output
 GREEN = "\033[92m"
 RED = "\033[91m"
 CYAN = "\033[96m"
@@ -47,7 +43,7 @@ def banner():
     print(f"\t\t\t\t\t{lcyan}{BOLD}🔗 https://instagram.com/apkaless{rescolor}")
     print("\n")
 
-class SimpleHotmailChecker:
+class HotmailChecker:
     def __init__(self, quiet=True):
         self.session = requests.Session()
         self.base_url = "https://login.live.com"
@@ -90,7 +86,7 @@ class SimpleHotmailChecker:
     def check_account_with_retry(self, email, password, max_retries=3):
         """Check account credentials with limited retries"""
         self.log("=" * 60)
-        self.log("🔐 SIMPLE HOTMAIL/OUTLOOK CHECKER")
+        self.log("🔐 HOTMAIL/OUTLOOK CHECKER")
         self.log("=" * 60)
         self.log(f"📧 Email: {email}")
         self.log(f"🕐 Started: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
@@ -211,7 +207,6 @@ class SimpleHotmailChecker:
         # Check for JavaScript redirect (common with Microsoft)
         if 'javascript required to sign in' in response_text:
             self.log("⚠️  JavaScript redirect detected - this usually means login was successful")
-            self.log("   Microsoft often uses JavaScript redirects for successful logins")
             return True
         
         # Check for success indicators
@@ -275,7 +270,7 @@ def main(save_path: str):
     """Main function"""
     banner()
     # Prepare checker (no proxy)
-    checker = SimpleHotmailChecker()
+    checker = HotmailChecker()
     
     results = []
     
@@ -321,7 +316,7 @@ def main(save_path: str):
     print("\n")
     def process_one(item):
         idx, email, password = item
-        local_checker = SimpleHotmailChecker(quiet=True)
+        local_checker = HotmailChecker(quiet=True)
         result = local_checker.check_account_with_retry(email, password, max_retries=3)
         with lock:
             results.append((email, result))

@@ -57,14 +57,12 @@ class SystemTweaker:
     def reset_winsock(self) -> TweakResult:
         if not self._is_admin():
             return TweakResult(False, 'Administrator privileges are required to reset Winsock')
-        self._checkpoint('Apkaless_ResetWinsock')
         ok, msg = self._run('netsh winsock reset')
         return TweakResult(ok, 'Winsock reset. Reboot recommended.' if ok else f'Winsock reset failed: {msg}')
 
     def reset_ip_stack(self) -> TweakResult:
         if not self._is_admin():
             return TweakResult(False, 'Administrator privileges are required to reset IP stack')
-        self._checkpoint('Apkaless_ResetIP')
         ok1, msg1 = self._run('netsh int ip reset')
         ok2, msg2 = self._run('netsh int ipv6 reset')
         ok = ok1 and ok2
@@ -78,9 +76,10 @@ class SystemTweaker:
         """
         if not self._is_admin():
             return [TweakResult(False, 'Administrator privileges are required to set DNS')]
-        self._checkpoint('Apkaless_SetDNS')
 
         results: List[TweakResult] = []
+        self._checkpoint(f'Apkaless_dns')
+
         # Query adapter names
         ok, output = self._run('netsh interface show interface | findstr /R /C:"Enabled"')
         if not ok:
@@ -112,7 +111,7 @@ class SystemTweaker:
         return results
 
     def optimize_tcp(self) -> List[TweakResult]:
-        """Apply conservative TCP tweaks aimed at throughput without being aggressive.
+        r"""Apply conservative TCP tweaks aimed at throughput without being aggressive.
         Keys are under HKLM\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters.
         """
         if not self._is_admin():
@@ -124,7 +123,6 @@ class SystemTweaker:
             (r'"HKLM\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters"', 'TcpTimedWaitDelay', 'REG_DWORD', '30'),
             (r'"HKLM\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters"', 'MaxUserPort', 'REG_DWORD', '65534'),
         ]
-
         results: List[TweakResult] = []
         for key, name, typ, value in tweaks:
             ok, msg = self._run(f'reg add {key} /v {name} /t {typ} /d {value} /f')
@@ -241,13 +239,13 @@ class SystemTweaker:
         """
         if not self._is_admin():
             return [TweakResult(False, 'Administrator privileges are required to modify Edge')] 
-        self._checkpoint('Apkaless_Debloat_Edge')
+        # self._checkpoint('Apkaless_Debloat_Edge')
 
         results: List[TweakResult] = []
         # Disable Edge update services
         for svc in ['edgeupdate', 'edgeupdatem']:
             ok1, msg1 = self._run(f'sc stop {svc}')
-            ok2, msg2 = self._run(f'sc config {svc} start= disabled')
+            ok2, msg2 = self._run(f'sc config {svc} start=disabled')
             results.append(TweakResult(ok1 or 'has not been started' in msg1.lower(), f'{svc} stop: {msg1 or "ok"}'))
             results.append(TweakResult(ok2, f'{svc} disabled' if ok2 else f'{svc} disable failed: {msg2}'))
 
@@ -262,27 +260,24 @@ class SystemTweaker:
             ok, msg = self._run(f'schtasks /Change /TN "{task}" /Disable')
             results.append(TweakResult(ok or 'cannot find the file specified' in (msg or '').lower(), f'Task {task} disabled' if ok else f'Task {task} disable: {msg or "not found"}'))
 
-        # Attempt uninstall (system-level)
-        # Search common installer paths for setup.exe
         setup_paths = [
-            r'%ProgramFiles(x86)%\Microsoft\Edge\Application',
-            r'%ProgramFiles%\Microsoft\Edge\Application'
+            rf'{os.path.join(os.environ['programfiles(x86)'], 'Microsoft')}',
+            rf'{os.path.join(os.environ['programfiles'], 'Microsoft')}'
         ]
         found_setup = False
         for base in setup_paths:
-            # List directories and try Installer\setup.exe
-            ok, listing = self._run(f'cmd /c for /d %G in ("{base}\\*") do @if exist "%G\\Installer\\setup.exe" echo %G')
-            if ok and listing:
-                for line in listing.splitlines():
-                    inst_path = f'"{line}\\Installer\\setup.exe"'
-                    oku, msgu = self._run(f'{inst_path} --uninstall --system-level --force-uninstall')
-                    results.append(TweakResult(oku, 'Edge uninstall attempted (system-level)' if oku else f'Edge uninstall attempt failed: {msgu}'))
+            ok, msgu = self._run(f'takeown /f "{base}" /r /d y')
+            if ok and msgu:
+                oku, grantmsg = self._run(f'icacls "{base}" /grant administrators:F /t')
+                if oku:
+                    okr, rmsg = self._run(f'rmdir /s /q "{base}"')
+                    results.append(TweakResult(okr, 'Edge uninstall attempted (system-level)' if okr else f'Edge uninstall attempt failed: {rmsg}'))
                     found_setup = True
                     break
             if found_setup:
                 break
         if not found_setup:
-            results.append(TweakResult(False, 'Edge setup.exe not found; skipped uninstall step'))
+            results.append(TweakResult(False, 'Edge not found; skipped uninstall step'))
 
         return results
 
@@ -315,8 +310,7 @@ def main() -> None:
     tw = SystemTweaker()
 
     menu = (
-        "\nSystem Tweaker (Windows)\n"
-        "=" * 28 + "\n"
+        "\nSystem Tweaker (Windows)\n\n"
         "1) Flush DNS\n"
         "2) Reset Winsock (admin)\n"
         "3) Reset IP Stack (admin)\n"
@@ -343,24 +337,24 @@ def main() -> None:
             p = input('Primary DNS (e.g., 1.1.1.1): ').strip()
             s = input('Secondary DNS (optional): ').strip() or None
             for res in tw.set_dns_for_all_adapters(p, s):
-                print(res)
+                print(res.message)
         elif choice == '5':
             for res in tw.optimize_tcp():
-                print(res)
+                print(res.message)
         elif choice == '6':
             for res in tw.apply_privacy_tweaks():
-                print(res)
+                print(res.message)
         elif choice == '7':
             for res in tw.revert_privacy_tweaks():
-                print(res)
+                print(res.message)
         elif choice == '8':
             print(tw.clear_temp_files())
         elif choice == '9':
             for res in tw.debloat_edge():
-                print(res)
+                print(res.message)
         elif choice == '10':
             for res in tw.disable_copilot():
-                print(res)
+                print(res.message)
         elif choice == '11':
             break
         else:
