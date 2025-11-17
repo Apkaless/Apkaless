@@ -46,7 +46,6 @@ import urllib3
 import ssl
 import ctypes
 
-# Disable SSL warnings for better user experience
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 
@@ -77,8 +76,7 @@ def value_checker(reg_key: str, value: str):
             return True
         return False
     print(f'\n{red}ERROR: {white}Something Went Wrong !')
-    
-# Enhanced configuration and logging setup
+
 class ConfigManager:
     def __init__(self):
         self.config_file = "apkaless_config.ini"
@@ -680,7 +678,6 @@ def enhanced_wifiPassword():
     try:
         all_ssid = []
         
-        # Use subprocess with better error handling
         try:
             res = subprocess.check_output('netsh wlan show profile', 
                                         shell=True, stderr=subprocess.PIPE, 
